@@ -1,0 +1,9 @@
+[submodule "subprojects/wync"]
+	path = subprojects/wync
+	url = https://github.com/wync-netcode/wync
+[submodule "subprojects/raygui"]
+	path = subprojects/rayguis
+	url = https://github.com/raysan5/raygui
+[submodule "subprojects/raygui/raygui"]
+	path = subprojects/raygui/raygui
+	url = https://github.com/raysan5/raygui

@@ -1,0 +1,10 @@
+build
+deps
+.cache
+scripts/*.svg
+scripts/*.html
+scripts/*.out
+*.png~
+*.blend1
+
+subprojects/packagecache
