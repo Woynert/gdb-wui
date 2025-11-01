@@ -7,3 +7,9 @@
 [submodule "subprojects/raygui/raygui"]
 	path = subprojects/raygui/raygui
 	url = https://github.com/raysan5/raygui
+[submodule "subprojects/cwalk"]
+	path = subprojects/cwalk
+	url = https://github.com/likle/cwalk
+[submodule "subprojects/mickstr/mickstr"]
+	path = subprojects/mickstr/mickstr
+	url = https://github.com/mickjc750/str
