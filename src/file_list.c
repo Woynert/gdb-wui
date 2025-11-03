@@ -2,8 +2,10 @@
 #include "raylib.h"
 #include "raygui.h"
 #include "strbuf.h"
+#include "strbuf_extra.h"
 #include "strview.h"
 #include "cwalk.h"
+#include "portable_utils.h"
 
 #include "stdio.h"
 #include "stdlib.h"
@@ -33,12 +35,30 @@
 #endif
 
 
+inline size_t size_t_max(size_t a, size_t b) { return a > b ? a : b; }
+inline size_t size_t_min(size_t a, size_t b) { return a < b ? a : b; }
+inline size_t size_t_clamp(size_t min, size_t max, size_t value) {
+    return size_t_max(min, size_t_min(max, value));
+}
+inline int int_max(int a, int b) { return a > b ? a : b; }
+inline int int_min(int a, int b) { return a < b ? a : b; }
+inline int int_clamp(int min, int max, int value) {
+    return int_max(min, int_min(max, value));
+}
 
 typedef struct File {
-    char path[MAX_FILEPATH_LENGTH];
     bool is_file;
+    union {
+        strbuf_space_t(MAX_FILEPATH_LENGTH) _path;
+        strbuf_t path;
+    };
 } File;
 
+File File_create(void) {
+    File file = { 0 };
+    STRBUF_STATIC_INIT2(MAX_FILEPATH_LENGTH, file._path);
+    return file;
+}
 
 #define DYN_ARR_TYPE File
 #include "./containers/da.h"
@@ -48,60 +68,90 @@ typedef struct File {
 #include "./containers/da.h"
 #undef DYN_ARR_TYPE
 
+#define DYN_ARR_TYPE strview_t
+#include "./containers/da.h"
+#undef DYN_ARR_TYPE
 
 typedef struct {
-    char curr_path[MAX_FILEPATH_LENGTH];
+    union {
+        strbuf_space_t(MAX_FILEPATH_LENGTH) _curr_path;
+        strbuf_t curr_path;
+    };
     File_DynArr files_dyna;
 } FileExplorer;
 
+FileExplorer FileExplorer_create(void) {
+    FileExplorer file_explorer = { 0 };
+    STRBUF_STATIC_INIT2(MAX_FILEPATH_LENGTH, file_explorer._curr_path);
+    file_explorer.files_dyna = File_DynArr_create();
+    return file_explorer;
+}
 
 typedef struct {
-    char file_path[MAX_FILEPATH_LENGTH];
-    char *file_data;
-    size_t file_data_size;
-    size_t_DynArr newlines; // marks where are the newlines
+    union {
+        strbuf_space_t(MAX_FILEPATH_LENGTH) _file_path;
+        strbuf_t file_path;
+    };
+    strbuf_t *file_data;
+    strview_t_DynArr lines;
 } FileViewer;
-
 
 FileViewer FileViewer_create(void) {
     FileViewer viewer = { 0 };
-    viewer.newlines = size_t_DynArr_create();
-    viewer.file_data_size = 1;
-    viewer.file_data = (char*)calloc(1, viewer.file_data_size);
+    STRBUF_STATIC_INIT2(MAX_FILEPATH_LENGTH, viewer._file_path);
+    viewer.file_data = strbuf_create_empty(0, NULL);
+    viewer.lines = strview_t_DynArr_create();
     return viewer;
 }
 
-
 /// @returns error
-int FileViewer_load_file(FileViewer *viewer, const char* path) {
-    if (!FileExists(path) || !IsPathFile(path)) {
-        return -1;
-    }
+int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
+    int return_error = 0;
+    strbuf_t *path = NULL;
+    strbuf_t *file_content = NULL;
 
-    char *file_content = LoadFileText(path);
-    size_t content_size = strlen(file_content);
-
-    memset(viewer->file_path, 0, sizeof(viewer->file_path));
-    strcpy(viewer->file_path, path);
-
-    if (content_size > viewer->file_data_size) {
-        viewer->file_data_size = content_size+1;
-        viewer->file_data = (char*)realloc(viewer->file_data, viewer->file_data_size);
-    }
-
-    strcpy(viewer->file_data, file_content);
-
-    // find newlines
-    size_t_DynArr_clear_preserving_capacity(&viewer->newlines);
-    for (size_t i = 0; i < content_size; ++i) {
-        if (file_content[i] == '\n') {
-            size_t_DynArr_insert(&viewer->newlines, i);
+    do {
+        path = strbuf_create_init(path_view, NULL);
+        if (!FileExists(path->cstr) || !IsPathFile(path->cstr)) {
+            return_error = -1;
+            break;
         }
-    }
 
-    free(file_content);
-    printf("DEBUG: Succesfully loaded file\n");
-    return OK;
+        // Must free constents from RayLib
+        {
+            file_content = strbuf_create(cstr(LoadFileText(path->cstr)), NULL);
+            if (viewer->file_data == 0) {
+                return_error = -2;
+                break;
+            }
+            strbuf_assign(&viewer->file_data, strbuf_view(&file_content));
+        }
+
+        {
+            strbuf_t *tmp = &viewer->file_path;
+            strbuf_assign(&tmp, path_view);
+        }
+
+        // find newlines
+
+        strview_t line_reader = strbuf_view(&viewer->file_data);
+        strview_t line = { 0 };
+        strview_t_DynArr_clear_preserving_capacity(&viewer->lines);
+
+        do {
+            line = strview_split_first_delim(&line_reader, "\n", true);
+            strview_t_DynArr_insert(&viewer->lines, line);
+            printf("(%d) %"PRIstr"\n", line.size, PRIstrarg(line));
+        }
+        while (line_reader.size > 0 || !strview_is_valid(line));
+
+        printf("DEBUG: Succesfully loaded file\n");
+        return_error = OK;
+    } while (0);
+
+    strbuf_destroy(&path);
+    strbuf_destroy(&file_content);
+    return return_error;
 }
 
 
@@ -110,56 +160,75 @@ uint uintmin(uint a, uint b) { return a > b ? b : a; }
 size_t size_tmin(size_t a, size_t b) { return a > b ? b : a; }
 
 
-void list_files(FileExplorer *file_explorer, const char* path) {
-    file_explorer->files_dyna = File_DynArr_create();
-    strcpy(file_explorer->curr_path, path);
-    /*file_explorer->curr_path[]*/
-    printf("%s\n", file_explorer->curr_path);
+int list_files(FileExplorer *file_explorer, strview_t path_view) {
+    strbuf_t *path = strbuf_create_init(path_view, NULL);
+    if (!FileExists(path->cstr) || IsPathFile(path->cstr)) {
+        return -1;
+    }
+
+    File_DynArr_clear_preserving_capacity(&file_explorer->files_dyna);
+
+    {
+        strbuf_t *file_explorer_curr_path = &file_explorer->curr_path;
+        strbuf_assign(&file_explorer_curr_path, path_view);
+    }
+    printf("%s\n", file_explorer->curr_path.cstr);
 
     File_DynArr *files_dyna = &file_explorer->files_dyna;
-    FilePathList file_list = LoadDirectoryFiles(path);
+    FilePathList file_list = LoadDirectoryFiles(path->cstr);
 
     {
         // Add previous
-        File file = { 0 };
+        File file = File_create();
         file.is_file = false;
-        strcat(file.path, path);
-        strcat(file.path, "/..");
+        {
+            strbuf_t *file_path = &file.path;
+            strbuf_assign(&file_path, cstr(".."));
+        }
         File_DynArr_insert(files_dyna, file);
     }
 
-    for (uint i = 0; i < file_list.count; i++) {
+    for (uint i = 0; i < file_list.count; i++) { // directories
         if (IsPathFile(file_list.paths[i])) continue;
-        File file = { 0 };
-        strncpy(file.path, file_list.paths[i],
-                uintmin(sizeof(file.path), (uint)strlen(file_list.paths[i])));
-        file.path[sizeof(file.path)-1] = 0;
+        strview_t basename;
+        size_t length;
+        cwk_path_get_basename(file_list.paths[i], &basename.data, &length);
+        basename.size = (int)length;
+
+        File file = File_create();
         file.is_file = false;
+        {
+            strbuf_t *file_path = &file.path;
+            strbuf_assign(&file_path, basename);
+        }
         File_DynArr_insert(files_dyna, file);
     }
-    for (uint i = 0; i < file_list.count; i++) {
+    for (uint i = 0; i < file_list.count; i++) { // files
         if (!IsPathFile(file_list.paths[i])) continue;
-        File file = { 0 };
-        strncpy(file.path, file_list.paths[i],
-                uintmin(sizeof(file.path), (uint)strlen(file_list.paths[i])));
-        file.path[sizeof(file.path)-1] = 0;
+        strview_t basename;
+        size_t length;
+        cwk_path_get_basename(file_list.paths[i], &basename.data, &length);
+        basename.size = (int)length;
+
+        File file = File_create();
         file.is_file = true;
+        {
+            strbuf_t *file_path = &file.path;
+            strbuf_assign(&file_path, basename);
+        }
         File_DynArr_insert(files_dyna, file);
     }
 
     File_DynArrIterator it = { 0 };
     while (File_DynArr_iterator_get_next(files_dyna, &it) == OK) {
         printf("%s %s\n",
-                it.item->path,
+                it.item->path.cstr,
                 it.item->is_file ? "FILE" : "DIR");
     }
-}
 
-void strbuf_recalculate_size_as_cstr(strbuf_t** buf_ptr) {
-    strbuf_t* buf = *buf_ptr;
-    buf->size = (int)strlen(buf->cstr);
+    UnloadDirectoryFiles(file_list);
+    return OK;
 }
-
 
 int main (void) {
 
@@ -170,18 +239,24 @@ int main (void) {
     InitWindow(screenWidth, screenHeight, "File list demo");
     SetTargetFPS(60);
 
-    FileExplorer file_explorer = { 0 };
-    file_explorer.files_dyna = File_DynArr_create();
-    strcpy(file_explorer.curr_path, GetWorkingDirectory());
-    assert(strlen(GetWorkingDirectory())-1 <= sizeof(file_explorer.curr_path));
+    FileExplorer file_explorer = FileExplorer_create();
+    {
+        strbuf_t *tmp = &file_explorer.curr_path;
+        strbuf_assign(&tmp, cstr(GetWorkingDirectory()));
+    }
 
     FileViewer file_viewer = FileViewer_create();
+
     Rectangle panel_view = { 0 };
     Vector2 panel_scroll = { 0 };
 
-    printf("%s\n", file_explorer.curr_path);
+    strbuf_t *aux_file_str = strbuf_create_empty(MAX_FILEPATH_LENGTH, NULL);
 
-    list_files(&file_explorer, GetWorkingDirectory());
+    printf("%s\n", file_explorer.curr_path.cstr);
+
+    int error = list_files(&file_explorer, cstr(file_explorer.curr_path.cstr));
+    printf("%d\n", error);
+    ASSERT(error == OK);
 
     while (!WindowShouldClose()) // Detect window close button or ESC key
     {
@@ -190,10 +265,8 @@ int main (void) {
         ClearBackground(BLACK);
         DrawFPS(0,0);
 
-        char str_file_name[MAX_FILEPATH_LENGTH] = { 0 };
         const float BTN_V_PAD = 1;
         Rectangle btn_rect = { 20, 40, 100, 15 };
-        uint curr_path_str_len = (uint)strlen(file_explorer.curr_path) +1;
 
         File_DynArrIterator it = { 0 };
         while (File_DynArr_iterator_get_next(
@@ -202,33 +275,33 @@ int main (void) {
             File *file = it.item;
 
             // name formatting
-            uint str_len = (uint)strlen(file->path) -curr_path_str_len;
-            strncpy(str_file_name,
-                    file->path +curr_path_str_len,
-                    str_len
-            );
-            str_file_name[
-                uintmin(
-                    sizeof(str_file_name)-1,
-                    str_len
-                )
-            ] = 0;
-            if (!file->is_file
-                && strlen(str_file_name)+1 < sizeof(str_file_name)
-            ){
-                    strcat(str_file_name, "/");
+            {
+                strbuf_t *tmp = &file->path;
+                strbuf_assign(&aux_file_str, strbuf_view(&tmp));
+            }
+
+            if (!file->is_file) {
+                strbuf_append(&aux_file_str, "/");
             }
 
             // actual UI
 
-            if (GuiLabelButton(btn_rect, str_file_name)) {
-                if (!file->is_file) {
-                    printf("Selected file: %s\n", file->path);
-                    list_files(&file_explorer, file->path);
+            if (GuiLabelButton(btn_rect, aux_file_str->cstr)) {
+
+                strbuf_t *selected_path = &file->path;
+                strbuf_t *curr_path = &file_explorer.curr_path;
+                strbuf_cat(&aux_file_str, strbuf_view(&curr_path), cstr("/"), strbuf_view(&selected_path));
+
+                cwk_path_normalize(aux_file_str->cstr, (char*)aux_file_str->cstr, (size_t)aux_file_str->capacity);
+                strbuf_recalculate_size_as_cstr(&aux_file_str);
+
+                if (!file->is_file) { // open directory
+                    printf("Selected file: %s\n", file->path.cstr);
+                    list_files(&file_explorer, strbuf_view(&aux_file_str));
                     break;
                 }
-                else {
-                    FileViewer_load_file(&file_viewer, file->path);
+                else { // preview file
+                    FileViewer_load_file(&file_viewer, strbuf_view(&aux_file_str));
                 }
             }
             btn_rect.y += btn_rect.height + BTN_V_PAD;
@@ -252,36 +325,27 @@ int main (void) {
 
         float scroll_percent =
                         fabsf(panel_scroll.y / scroll_maximum.y);
-        /*float scroll_percent = panel_scroll.y / scroll_maximum.y;*/
         int font_height = 10;
-        size_t line_count = size_t_DynArr_get_size(&file_viewer.newlines);
+        int line_count = (int)strview_t_DynArr_get_size(&file_viewer.lines);
+
         // remove visible lines
-        line_count -= (size_t)floorf(panel_view.height / (float)font_height);
+        int screen_line_capacity = (int)floorf(panel_view.height / (float)font_height);
 
-        size_t from_line = (size_t)floorf(scroll_percent * (float)line_count);
-        size_t to_line = from_line + (size_t)(panel_view.height / (float)font_height);
+        int from_line = (int)floorf(scroll_percent * (float)(line_count - screen_line_capacity));
+        from_line = int_clamp(0, line_count, from_line);
 
-        /*printf("%zu %zu\n", from_line, to_line);*/
+        int to_line = from_line + screen_line_capacity;
+        to_line = int_clamp(from_line, line_count, to_line);
 
-        if (file_viewer.file_data_size > 0) {
-            char text_line[255] = { 0 };
-            for (size_t i = from_line, k = 0; i < to_line; ++i, ++k) {
-                if (i+1 >= size_t_DynArr_get_size(&file_viewer.newlines)) {
-                    break;
-                }
+        /*printf("from %d to %d | %d\n", from_line, to_line, line_count);*/
 
-                size_t from_char = *size_t_DynArr_get(&file_viewer.newlines, i)+1;
-                size_t to_char = *size_t_DynArr_get(&file_viewer.newlines, i+1);
+        for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
+            strview_t *line = strview_t_DynArr_get(&file_viewer.lines, (size_t)i);
+            if (line == NULL) continue;
 
-                /*printf("i%zu %zu\n", k, to_char - from_char );*/
-
-                size_t size = size_tmin(sizeof(text_line)-1, to_char - from_char);
-                strncpy(text_line, file_viewer.file_data + from_char, size);
-                text_line[size] = 0;
-
-                DrawText(text_line, (int)panel_view.x, (int)panel_view.y
-                        + font_height * (int)k, font_height, RED);
-            }
+            strbuf_assign(&aux_file_str, *line);
+            DrawText(aux_file_str->cstr, (int)panel_view.x, (int)panel_view.y
+                    + font_height * (int)k, font_height, RED);
         }
 
         EndDrawing();
