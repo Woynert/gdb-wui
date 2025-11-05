@@ -43,10 +43,10 @@ int main (void) {
     while (!WindowShouldClose()) // Detect window close button or ESC key
     {
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(DARKGRAY);
         DrawFPS(0,0);
 
-        Rectangle file_explorer_rect = { 20, 40, 150, 300 };
+        Rectangle file_explorer_rect = { 20, 40, 180, 300 };
         bool file_clicked = FileExplorer_render(
                 &file_explorer, &selected_file, file_explorer_rect);
 
@@ -59,8 +59,8 @@ int main (void) {
             }
         }
 
-        Rectangle file_viewer_rect = { 200, 50, 300, 400 };
-        DrawRectangleRec(file_viewer_rect, WHITE);
+        Rectangle file_viewer_rect = { 210, 40, 500, 500 };
+        DrawRectangleRec(file_viewer_rect, COLOR_CODE_BG);
         FileViewer_render(&file_viewer, file_viewer_rect);
 
         EndDrawing();

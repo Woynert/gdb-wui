@@ -92,6 +92,10 @@ typedef struct {
 
 #define TRUE_BLUE CLITERAL(Color){   0,   0, 255, 255 }
 #define TRUE_RED  CLITERAL(Color){ 255,   0,   0, 255 }
+#define COLOR_DIRECTORY CLITERAL(Color){ 255, 0, 255, 255 }
+#define COLOR_CODE_BG  CLITERAL(Color){ 34, 35, 36, 255 }
+//#define COLOR_CODE_FG  CLITERAL(Color){ 186, 186, 186, 255 }
+#define COLOR_CODE_FG  WHITE
 
 
 /***** GLOBAL VARS ****************************************************/
@@ -111,10 +115,10 @@ void DrawCtx_set_global_context(DrawCtx draw_ctx) {
 void DrawCtx_setup(void) {
     DrawCtx draw_ctx = { 0 };
     draw_ctx.font_size = 16;
-    draw_ctx.font_spacing = 0;
-    draw_ctx.font = LoadFontEx("RobotoMono-Regular.ttf", draw_ctx.font_size, 0, 250);
-
-    SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_ANISOTROPIC_16X);
+    draw_ctx.font_spacing = 1;
+    draw_ctx.font = LoadFontEx("IosevkaFixed-Regular.ttf",
+            draw_ctx.font_size, 0, 250);
+    //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
 
     GuiSetFont(draw_ctx.font);
     GuiSetStyle(DEFAULT, TEXT_SIZE, draw_ctx.font_size);
@@ -267,7 +271,7 @@ void ScrollBar_widget(
 bool FileExplorer_render(
     FileExplorer *file_explorer, File* out_selected_file, Rectangle panel_rect
 ) {
-    DrawRectangleRec(panel_rect, WHITE);
+    DrawRectangleRec(panel_rect, COLOR_CODE_BG);
 
     bool selected_file = false;
     strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_filename_strbuf;
@@ -294,7 +298,7 @@ bool FileExplorer_render(
         // mouse interaction
 
         if (CheckCollisionPointRec(GetMousePosition(), btn_rect)) {
-            DrawRectangleRec(btn_rect, SKYBLUE);
+            DrawRectangleRec(btn_rect, DARKBLUE);
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 strbuf_t *selected_path = &file->path;
                 strbuf_t *curr_path = &file_explorer->curr_path;
@@ -332,7 +336,7 @@ bool FileExplorer_render(
                 panel_rect.x,
                 panel_rect.y + (float)(line_height * k) },
                 (float)DRAW_CTX.font_size, DRAW_CTX.font_spacing, 
-                file->is_file ? BLACK : TRUE_BLUE
+                file->is_file ? COLOR_CODE_FG : COLOR_DIRECTORY
         );
 
     }
@@ -415,7 +419,7 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
 /// Draw scrollable text window.
 void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
-    int line_height = DRAW_CTX.font_size + 0;
+    int line_height = DRAW_CTX.font_size - 1;
     int screen_line_capacity = (int)floorf(panel_rect.height / (float)line_height);
     int line_count = (int)strview_t_DynArr_get_size(&file_viewer->lines);
 
@@ -436,7 +440,7 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
         DrawTextEx(DRAW_CTX.font, aux_file_str->cstr, (Vector2) {
                 panel_rect.x,
                 panel_rect.y + (float)(line_height * k) },
-                (float)DRAW_CTX.font_size, DRAW_CTX.font_spacing, BLACK
+                (float)DRAW_CTX.font_size, DRAW_CTX.font_spacing, COLOR_CODE_FG
         );
     }
 
