@@ -44,7 +44,7 @@ int main (void) {
         ClearBackground(BLACK);
         DrawFPS(0,0);
 
-        Rectangle file_explorer_rect = { 20, 40, 150, 200 };
+        Rectangle file_explorer_rect = { 20, 40, 150, 100 };
         bool file_clicked = FileExplorer_render(
                 &file_explorer, &selected_file, file_explorer_rect);
 

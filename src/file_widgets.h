@@ -31,7 +31,7 @@ inline float float_clamp(float min, float max, float value) {
     #endif
 #endif
 
-static strbuf_space_t(MAX_FILEPATH_LENGTH) FileWidgets_aux_strbuf_space =
+static strbuf_space_t(MAX_FILEPATH_LENGTH) FileWidgets_aux_filename_strbuf =
         STRBUF_STATIC_INIT(MAX_FILEPATH_LENGTH);
 
 typedef struct File {
@@ -58,6 +58,9 @@ typedef struct FileExplorer {
         strbuf_t curr_path;
     };
     File_DynArr files_dyna;
+    // gui vars:
+    float scroll;
+    int scroll_line;
 } FileExplorer;
 
 FileExplorer FileExplorer_create(void) {
@@ -79,8 +82,8 @@ typedef struct FileViewer {
     strbuf_t *file_data;
     strview_t_DynArr lines;
     // gui vars:
-    int scroll_line;
     float scroll;
+    int scroll_line;
 } FileViewer;
 
 
@@ -164,67 +167,143 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
 }
 
 
+/// @param panel_rect Bounds of parent component to handle scrolling outside bar
+/// @param bar_rect Scroll bar bounds
+/// @param[out] out_scroll
+/// @param scroll_step For mouse wheel
+void ScrollBar_widget(
+    Rectangle parent_rect, Rectangle bar_rect,
+    float scroll_step, float *out_scroll
+) {
+    DrawRectangleRec(bar_rect, BLUE);
+    Vector2 mouse = GetMousePosition();
+    float mouse_wheel = GetMouseWheelMoveV().y;
+    float scroll_handle_height = 60;
+    Rectangle scrollbar_rect = bar_rect;
+    Rectangle scroll_rect = scrollbar_rect;
+    scroll_rect.y += scroll_handle_height/2;
+    scroll_rect.height -= scroll_handle_height;
+    float scroll_percent = ((mouse.y - scroll_rect.y) / scroll_rect.height);
+
+    // mouse wheel
+    if (CheckCollisionPointRec(mouse, parent_rect) && mouse_wheel != 0) {
+        *out_scroll += (mouse_wheel < 0 ? 1 : -1) * scroll_step;
+    }
+    // dragging
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)
+            && CheckCollisionPointRec(mouse, scrollbar_rect)
+    ) {
+        *out_scroll = scroll_percent;
+    }
+    *out_scroll = float_clamp(0, 1, *out_scroll);
+
+    Rectangle scroll_handle = {
+        scroll_rect.x,
+        0,
+        scroll_rect.width,
+        scroll_handle_height
+    };
+    scroll_handle.y = scroll_rect.y -scroll_handle_height/2 + float_clamp(0,
+        scroll_rect.height,
+        (*out_scroll) * scroll_rect.height
+    );
+
+    DrawRectangleRec(scrollbar_rect, GRAY);
+    //DrawRectangleRec(scroll_rect, WHITE); // For debugging.
+    DrawRectangleRec(scroll_handle, BLUE);
+}
+
+
 /// @param[out] out_selected_file
 /// @retval true  file clicked
 /// @retval false no file clicked
 bool FileExplorer_render(
     FileExplorer *file_explorer, File* out_selected_file, Rectangle panel_rect
 ) {
-
-    DrawRectangleRec(panel_rect, YELLOW);
-
-    // draw text
+    DrawRectangleRec(panel_rect, WHITE);
 
     bool selected_file = false;
-    const float BTN_V_PAD = 1;
-    Rectangle btn_rect = panel_rect;
-    btn_rect.height = 15;
-
-    strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_strbuf_space;
+    strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_filename_strbuf;
     strbuf_assign(&aux_file_str, cstr(""));
+    float scrollbar_width = 10;
+    int font_height = 10;
+    int line_height = font_height + 2;
 
-    File_DynArrIterator it = { 0 };
-    while (File_DynArr_iterator_get_next(
-                &file_explorer->files_dyna, &it) == OK)
-    {
-        File *file = it.item;
+    strbuf_t *aux_str;
+    Rectangle btn_rect = panel_rect;
+    btn_rect.height = (float)line_height;
+    btn_rect.width -= scrollbar_width + 2;
 
-        // name formatting
-        {
-            strbuf_t *tmp = &file->path;
-            strbuf_assign(&aux_file_str, strbuf_view(&tmp));
-        }
+    int line_count = (int)File_DynArr_get_size(&file_explorer->files_dyna);
+    int screen_line_capacity = (int)floorf(panel_rect.height / (float)line_height);
+    int from_line = int_clamp(0, line_count, file_explorer->scroll_line);
+    int to_line = int_clamp(
+            from_line, line_count, from_line + screen_line_capacity);
 
-        if (!file->is_file) {
-            strbuf_append(&aux_file_str, "/");
-        }
+    for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
+        File *file = File_DynArr_get(&file_explorer->files_dyna, (size_t)i);
+        if (file == NULL) continue;
 
-        // actual UI
+        // mouse interaction
 
-        if (GuiLabelButton(btn_rect, aux_file_str->cstr)) {
+        if (CheckCollisionPointRec(GetMousePosition(), btn_rect)) {
+            DrawRectangleRec(btn_rect, SKYBLUE);
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                strbuf_t *selected_path = &file->path;
+                strbuf_t *curr_path = &file_explorer->curr_path;
 
-            strbuf_t *selected_path = &file->path;
-            strbuf_t *curr_path = &file_explorer->curr_path;
+                strbuf_cat(&aux_file_str,
+                        strbuf_view(&curr_path),
+                        cstr("/"),
+                        strbuf_view(&selected_path));
+                cwk_path_normalize(aux_file_str->cstr,
+                        (char*)aux_file_str->cstr, (size_t)aux_file_str->capacity);
+                strbuf_recalculate_size_as_cstr(&aux_file_str);
 
-            strbuf_cat(&aux_file_str,
-                    strbuf_view(&curr_path),
-                    cstr("/"),
-                    strbuf_view(&selected_path));
-            cwk_path_normalize(aux_file_str->cstr,
-                    (char*)aux_file_str->cstr, (size_t)aux_file_str->capacity);
-            strbuf_recalculate_size_as_cstr(&aux_file_str);
+                selected_file = true;
+                *out_selected_file = *file;
+                aux_str = &out_selected_file->path;
+                strbuf_assign(&aux_str, strbuf_view(&aux_file_str));
 
-            *out_selected_file = *file;
-            selected_file = true;
-
-            if (!file->is_file) { // open directory
-                printf("Selected file: %s\n", file->path.cstr);
-                FileExplorer_list_path(
-                        file_explorer, strbuf_view(&aux_file_str));
-                break;
+                if (!file->is_file) { // open directory
+                    printf("Selected file: %s\n", file->path.cstr);
+                    FileExplorer_list_path(
+                            file_explorer, strbuf_view(&aux_file_str));
+                    file_explorer->scroll = 0;
+                    file_explorer->scroll_line = 0;
+                    break;
+                }
             }
         }
-        btn_rect.y += btn_rect.height + BTN_V_PAD;
+        btn_rect.y += (float)line_height;
+
+        // draw text
+
+        aux_str = &file->path;
+        strbuf_assign(&aux_file_str, strbuf_view(&aux_str));
+        DrawText(aux_file_str->cstr, (int)panel_rect.x, (int)panel_rect.y
+                + line_height * (int)k, font_height,
+                file->is_file ? BLACK : BLUE
+        );
+    }
+
+    // scroll bar
+
+    int visible_line_count = line_count
+            - (int)((2.f/3.f)*(float)screen_line_capacity); // EOF padding
+    Rectangle scrollbar_rect = {
+        panel_rect.x + panel_rect.width - scrollbar_width,
+        panel_rect.y,
+        scrollbar_width,
+        panel_rect.height
+    };
+    float prev_scroll = file_explorer->scroll;
+    ScrollBar_widget(panel_rect, scrollbar_rect,
+            (1.f/(float)line_count) * 3, &file_explorer->scroll);
+    if (prev_scroll != file_explorer->scroll) {
+        file_explorer->scroll_line = int_clamp(0, visible_line_count,
+            (int)(file_explorer->scroll * (float)(visible_line_count))
+        );
     }
 
     return selected_file;
@@ -265,6 +344,7 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
         strview_t line = { 0 };
         strview_t_DynArr_clear_preserving_capacity(&viewer->lines);
         viewer->scroll_line = 0;
+        viewer->scroll = 0;
 
         do {
             line = strview_split_first_delim(&line_reader, "\n", true);
@@ -283,60 +363,12 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
 }
 
 
-/// @param panel_rect Bounds of parent component to handle scrolling outside bar
-/// @param bar_rect Scroll bar bounds
-/// @param[out] out_scroll
-/// @param scroll_step For mouse wheel
-void ScrollBar_widget(
-    Rectangle parent_rect, Rectangle bar_rect,
-    float scroll_step, float *out_scroll
-) {
-    DrawRectangleRec(bar_rect, BLUE);
-    Vector2 mouse = GetMousePosition();
-    float mouse_wheel = GetMouseWheelMoveV().y;
-    float scroll_handle_height = 60;
-    Rectangle scroll_rect_hitbox = bar_rect;
-    Rectangle scroll_rect = scroll_rect_hitbox;
-    scroll_rect.y += scroll_handle_height/2;
-    scroll_rect.height -= scroll_handle_height;
-    float scroll_percent = ((mouse.y - scroll_rect.y) / scroll_rect.height);
-
-    // mouse wheel
-    if (CheckCollisionPointRec(mouse, parent_rect) && mouse_wheel != 0) {
-        *out_scroll += (mouse_wheel < 0 ? 1 : -1) * scroll_step;
-    }
-    // dragging
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)
-            && CheckCollisionPointRec(mouse, scroll_rect_hitbox)
-    ) {
-        *out_scroll = scroll_percent;
-    }
-    *out_scroll = float_clamp(0, 1, *out_scroll);
-
-    Rectangle scroll_handle = {
-        scroll_rect.x,
-        0,
-        scroll_rect.width,
-        scroll_handle_height
-    };
-    scroll_handle.y = scroll_rect.y -scroll_handle_height/2 + float_clamp(0,
-        scroll_rect.height,
-        (*out_scroll) * scroll_rect.height
-    );
-
-    DrawRectangleRec(scroll_rect_hitbox, BLUE);
-    //DrawRectangleRec(scroll_rect, BLUE); // For debugging.
-    DrawRectangleRec(scroll_handle, GRAY);
-}
-
-
 /// Draw scrollable text window.
 void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
     int font_height = 10;
     int screen_line_capacity = (int)floorf(panel_rect.height / (float)font_height);
     int line_count = (int)strview_t_DynArr_get_size(&file_viewer->lines);
-    int visible_line_count = line_count - screen_line_capacity;
 
     // Draw text
 
@@ -344,7 +376,7 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
     int to_line = from_line + screen_line_capacity;
     to_line = int_clamp(from_line, line_count, to_line);
 
-    strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_strbuf_space;
+    strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_filename_strbuf;
     strbuf_assign(&aux_file_str, cstr(""));
 
     for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
@@ -358,19 +390,20 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
     // scroll
 
-    visible_line_count += screen_line_capacity/3; // padding at EOF
-    float scroll_bar_width = 20;
-    Rectangle scroll_rect_hitbox = {
-        panel_rect.x + panel_rect.width - scroll_bar_width,
+    int visible_line_count = line_count
+            - (int)((2.f/3.f)*(float)screen_line_capacity); // padding at EOF
+    float scrollbar_width = 20;
+    Rectangle scrollbar_rect = {
+        panel_rect.x + panel_rect.width - scrollbar_width,
         panel_rect.y,
-        scroll_bar_width,
+        scrollbar_width,
         panel_rect.height
     };
 
     float prev_scroll = file_viewer->scroll;
     ScrollBar_widget(
         panel_rect,
-        scroll_rect_hitbox,
+        scrollbar_rect,
         (1.f/(float)line_count) * 5.f, // scroll 5 lines
         &file_viewer->scroll);
 
