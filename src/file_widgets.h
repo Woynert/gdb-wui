@@ -31,9 +31,6 @@ inline float float_clamp(float min, float max, float value) {
     #endif
 #endif
 
-static strbuf_space_t(MAX_FILEPATH_LENGTH) FileWidgets_aux_filename_strbuf =
-        STRBUF_STATIC_INIT(MAX_FILEPATH_LENGTH);
-
 typedef struct File {
     bool is_file;
     union {
@@ -85,6 +82,56 @@ typedef struct FileViewer {
     float scroll;
     int scroll_line;
 } FileViewer;
+
+typedef struct {
+	Font font;
+	int font_size;
+    int font_width;
+	float font_spacing;
+} DrawCtx;
+
+#define TRUE_BLUE CLITERAL(Color){   0,   0, 255, 255 }
+#define TRUE_RED  CLITERAL(Color){ 255,   0,   0, 255 }
+
+
+/***** GLOBAL VARS ****************************************************/
+
+DrawCtx DRAW_CTX = { 0 };
+
+static strbuf_space_t(MAX_FILEPATH_LENGTH) FileWidgets_aux_filename_strbuf =
+        STRBUF_STATIC_INIT(MAX_FILEPATH_LENGTH);
+
+/***********************************************************************/
+
+
+void DrawCtx_set_global_context(DrawCtx draw_ctx) {
+    DRAW_CTX = draw_ctx;
+}
+
+void DrawCtx_setup(void) {
+    DrawCtx draw_ctx = { 0 };
+    draw_ctx.font_size = 16;
+    draw_ctx.font_spacing = 0;
+    draw_ctx.font = LoadFontEx("RobotoMono-Regular.ttf", draw_ctx.font_size, 0, 250);
+
+    SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_ANISOTROPIC_16X);
+
+    GuiSetFont(draw_ctx.font);
+    GuiSetStyle(DEFAULT, TEXT_SIZE, draw_ctx.font_size);
+    GuiSetStyle(DEFAULT, TEXT_SPACING, (int)draw_ctx.font_spacing);
+    GuiSetAlpha(1.0f);
+
+    int w1 = (int)MeasureTextEx(draw_ctx.font, "W",
+            (float)draw_ctx.font_size, draw_ctx.font_spacing).x;
+    int w2 = (int)MeasureTextEx(draw_ctx.font, "@",
+            (float)draw_ctx.font_size, draw_ctx.font_spacing).x;
+    int w3 = (int)MeasureTextEx(draw_ctx.font, "_",
+            (float)draw_ctx.font_size, draw_ctx.font_spacing).x;
+    draw_ctx.font_width = int_max(w1, int_max(w2, w3));
+
+    // commit
+    DrawCtx_set_global_context(draw_ctx);
+}
 
 
 FileViewer FileViewer_create(void) {
@@ -226,8 +273,8 @@ bool FileExplorer_render(
     strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_filename_strbuf;
     strbuf_assign(&aux_file_str, cstr(""));
     float scrollbar_width = 10;
-    int font_height = 10;
-    int line_height = font_height + 2;
+    int font_height = DRAW_CTX.font_size;
+    int line_height = font_height + 0;
 
     strbuf_t *aux_str;
     Rectangle btn_rect = panel_rect;
@@ -281,16 +328,18 @@ bool FileExplorer_render(
 
         aux_str = &file->path;
         strbuf_assign(&aux_file_str, strbuf_view(&aux_str));
-        DrawText(aux_file_str->cstr, (int)panel_rect.x, (int)panel_rect.y
-                + line_height * (int)k, font_height,
-                file->is_file ? BLACK : BLUE
+        DrawTextEx(DRAW_CTX.font, aux_file_str->cstr, (Vector2) {
+                panel_rect.x,
+                panel_rect.y + (float)(line_height * k) },
+                (float)DRAW_CTX.font_size, DRAW_CTX.font_spacing, 
+                file->is_file ? BLACK : TRUE_BLUE
         );
+
     }
 
     // scroll bar
 
-    int visible_line_count = line_count
-            - (int)((2.f/3.f)*(float)screen_line_capacity); // EOF padding
+    int visible_line_count = line_count - screen_line_capacity + 3; // EOF pad
     Rectangle scrollbar_rect = {
         panel_rect.x + panel_rect.width - scrollbar_width,
         panel_rect.y,
@@ -366,8 +415,8 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
 /// Draw scrollable text window.
 void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
-    int font_height = 10;
-    int screen_line_capacity = (int)floorf(panel_rect.height / (float)font_height);
+    int line_height = DRAW_CTX.font_size + 0;
+    int screen_line_capacity = (int)floorf(panel_rect.height / (float)line_height);
     int line_count = (int)strview_t_DynArr_get_size(&file_viewer->lines);
 
     // Draw text
@@ -384,8 +433,11 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
         if (line == NULL) continue;
 
         strbuf_assign(&aux_file_str, *line);
-        DrawText(aux_file_str->cstr, (int)panel_rect.x, (int)panel_rect.y
-                + font_height * (int)k, font_height, RED);
+        DrawTextEx(DRAW_CTX.font, aux_file_str->cstr, (Vector2) {
+                panel_rect.x,
+                panel_rect.y + (float)(line_height * k) },
+                (float)DRAW_CTX.font_size, DRAW_CTX.font_spacing, BLACK
+        );
     }
 
     // scroll

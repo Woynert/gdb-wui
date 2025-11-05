@@ -22,6 +22,8 @@ int main (void) {
     InitWindow(screenWidth, screenHeight, "File list demo");
     SetTargetFPS(60);
 
+    DrawCtx_setup();
+
     FileExplorer file_explorer = FileExplorer_create();
     {
         strbuf_t *tmp = &file_explorer.curr_path;
@@ -44,7 +46,7 @@ int main (void) {
         ClearBackground(BLACK);
         DrawFPS(0,0);
 
-        Rectangle file_explorer_rect = { 20, 40, 150, 100 };
+        Rectangle file_explorer_rect = { 20, 40, 150, 300 };
         bool file_clicked = FileExplorer_render(
                 &file_explorer, &selected_file, file_explorer_rect);
 
