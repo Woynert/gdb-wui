@@ -1,3 +1,6 @@
+#ifndef PORTABLE_UTILS_H
+#define PORTABLE_UTILS_H
+
 #include "stdio.h"   // printf
 #include "stdbool.h" // true
 #include "stdlib.h"  // exit
@@ -13,3 +16,5 @@
             exit(1); \
         } \
     } while (0)
+
+#endif

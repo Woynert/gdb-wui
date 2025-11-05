@@ -1,3 +1,6 @@
+#ifndef STRBUF_EXTRA_H
+#define STRBUF_EXTRA_H
+
 #include "strbuf.h"
 
 #define STRBUF_STATIC_INIT2(cap, strbuf) do { \
@@ -8,3 +11,5 @@ void strbuf_recalculate_size_as_cstr(strbuf_t** buf_ptr) {
     strbuf_t* buf = *buf_ptr;
     buf->size = (int)strlen(buf->cstr);
 }
+
+#endif // !STRBUF_EXTRA_H
