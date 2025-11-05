@@ -80,6 +80,7 @@ typedef struct FileViewer {
     strview_t_DynArr lines;
     // gui vars:
     int scroll_line;
+    float scroll;
 } FileViewer;
 
 
@@ -166,10 +167,18 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
 /// @param[out] out_selected_file
 /// @retval true  file clicked
 /// @retval false no file clicked
-bool FileExplorer_render(FileExplorer *file_explorer, File* out_selected_file) {
+bool FileExplorer_render(
+    FileExplorer *file_explorer, File* out_selected_file, Rectangle panel_rect
+) {
+
+    DrawRectangleRec(panel_rect, YELLOW);
+
+    // draw text
+
     bool selected_file = false;
     const float BTN_V_PAD = 1;
-    Rectangle btn_rect = { 20, 40, 100, 15 };
+    Rectangle btn_rect = panel_rect;
+    btn_rect.height = 15;
 
     strbuf_t *aux_file_str = (strbuf_t*)&FileWidgets_aux_strbuf_space;
     strbuf_assign(&aux_file_str, cstr(""));
@@ -274,6 +283,53 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
 }
 
 
+/// @param panel_rect Bounds of parent component to handle scrolling outside bar
+/// @param bar_rect Scroll bar bounds
+/// @param[out] out_scroll
+/// @param scroll_step For mouse wheel
+void ScrollBar_widget(
+    Rectangle parent_rect, Rectangle bar_rect,
+    float scroll_step, float *out_scroll
+) {
+    DrawRectangleRec(bar_rect, BLUE);
+    Vector2 mouse = GetMousePosition();
+    float mouse_wheel = GetMouseWheelMoveV().y;
+    float scroll_handle_height = 60;
+    Rectangle scroll_rect_hitbox = bar_rect;
+    Rectangle scroll_rect = scroll_rect_hitbox;
+    scroll_rect.y += scroll_handle_height/2;
+    scroll_rect.height -= scroll_handle_height;
+    float scroll_percent = ((mouse.y - scroll_rect.y) / scroll_rect.height);
+
+    // mouse wheel
+    if (CheckCollisionPointRec(mouse, parent_rect) && mouse_wheel != 0) {
+        *out_scroll += (mouse_wheel < 0 ? 1 : -1) * scroll_step;
+    }
+    // dragging
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)
+            && CheckCollisionPointRec(mouse, scroll_rect_hitbox)
+    ) {
+        *out_scroll = scroll_percent;
+    }
+    *out_scroll = float_clamp(0, 1, *out_scroll);
+
+    Rectangle scroll_handle = {
+        scroll_rect.x,
+        0,
+        scroll_rect.width,
+        scroll_handle_height
+    };
+    scroll_handle.y = scroll_rect.y -scroll_handle_height/2 + float_clamp(0,
+        scroll_rect.height,
+        (*out_scroll) * scroll_rect.height
+    );
+
+    DrawRectangleRec(scroll_rect_hitbox, BLUE);
+    //DrawRectangleRec(scroll_rect, BLUE); // For debugging.
+    DrawRectangleRec(scroll_handle, GRAY);
+}
+
+
 /// Draw scrollable text window.
 void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
@@ -302,17 +358,7 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
     // scroll
 
-    const int SCROLL_STEP = 5;
     visible_line_count += screen_line_capacity/3; // padding at EOF
-    Vector2 mouse = GetMousePosition();
-    float mouse_wheel = GetMouseWheelMoveV().y;
-    if (CheckCollisionPointRec(mouse, panel_rect) && mouse_wheel != 0) {
-        file_viewer->scroll_line += (mouse_wheel < 0 ? 1 : -1) * SCROLL_STEP;
-        file_viewer->scroll_line = int_clamp(
-            0, visible_line_count, file_viewer->scroll_line);
-    }
-
-    float scroll_handle_height = 60;
     float scroll_bar_width = 20;
     Rectangle scroll_rect_hitbox = {
         panel_rect.x + panel_rect.width - scroll_bar_width,
@@ -320,34 +366,19 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
         scroll_bar_width,
         panel_rect.height
     };
-    Rectangle scroll_rect = scroll_rect_hitbox;
-    scroll_rect.y += scroll_handle_height/2;
-    scroll_rect.height -= scroll_handle_height;
-    float scroll_percent = ((mouse.y - scroll_rect.y) / scroll_rect.height);
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)
-            && CheckCollisionPointRec(mouse, scroll_rect_hitbox)
-    ) {
+    float prev_scroll = file_viewer->scroll;
+    ScrollBar_widget(
+        panel_rect,
+        scroll_rect_hitbox,
+        (1.f/(float)line_count) * 5.f, // scroll 5 lines
+        &file_viewer->scroll);
+
+    if (prev_scroll != file_viewer->scroll) {
         file_viewer->scroll_line = int_clamp(0, visible_line_count,
-            (int)(scroll_percent * (float)(visible_line_count))
+            (int)(file_viewer->scroll * (float)(visible_line_count))
         );
     }
-
-    Rectangle scroll_handle = {
-        scroll_rect.x,
-        0,
-        scroll_rect.width,
-        scroll_handle_height
-    };
-    scroll_handle.y = scroll_rect.y -scroll_handle_height/2 + float_clamp(0,
-        scroll_rect.height,
-        ((float)file_viewer->scroll_line/(float)visible_line_count)
-                * scroll_rect.height
-    );
-
-    DrawRectangleRec(scroll_rect_hitbox, BLUE);
-    //DrawRectangleRec(scroll_rect, BLUE); // For debugging.
-    DrawRectangleRec(scroll_handle, GRAY);
 }
 
 

@@ -44,7 +44,10 @@ int main (void) {
         ClearBackground(BLACK);
         DrawFPS(0,0);
 
-        bool file_clicked = FileExplorer_render(&file_explorer, &selected_file);
+        Rectangle file_explorer_rect = { 20, 40, 150, 200 };
+        bool file_clicked = FileExplorer_render(
+                &file_explorer, &selected_file, file_explorer_rect);
+
         if (file_clicked && selected_file.is_file) {
             printf("Selected file: %s (file? %d)\n",
                     selected_file.path.cstr, selected_file.is_file);
@@ -54,9 +57,9 @@ int main (void) {
             }
         }
 
-        Rectangle panel_rect = { 200, 50, 300, 400 };
-        DrawRectangleRec(panel_rect, WHITE);
-        FileViewer_render(&file_viewer, panel_rect);
+        Rectangle file_viewer_rect = { 200, 50, 300, 400 };
+        DrawRectangleRec(file_viewer_rect, WHITE);
+        FileViewer_render(&file_viewer, file_viewer_rect);
 
         EndDrawing();
     }
