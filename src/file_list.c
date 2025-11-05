@@ -54,7 +54,9 @@ int main (void) {
             }
         }
 
-        FileViewer_render(&file_viewer);
+        Rectangle panel_rect = { 200, 50, 300, 400 };
+        DrawRectangleRec(panel_rect, WHITE);
+        FileViewer_render(&file_viewer, panel_rect);
 
         EndDrawing();
     }
