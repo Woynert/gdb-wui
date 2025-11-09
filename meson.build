@@ -59,7 +59,8 @@ gdbwui_exe = executable(
   ,dependencies : [
     raylib_dep,
     math_dep,
-    raygui_dep
+    raygui_dep,
+    mickstr_dep
   ]
   ,c_args : my_extra_args
 )

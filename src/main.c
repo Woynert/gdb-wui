@@ -5,6 +5,10 @@
 #include "stdlib.h"
 #include "unistd.h"
 #include "string.h"
+#include "strbuf.h"
+#include "strview.h"
+#include "strbuf_extra.h"
+#include "portable_utils.h"
 #include "sys/wait.h"
 
 #include <stdio.h>
@@ -15,8 +19,78 @@
 #include <sys/wait.h>
 #include <sys/prctl.h>
 
+#define GDBUFFER_SIZE 4096
+
+
+typedef struct IPCReader {
+    union {
+        strbuf_space_t(GDBUFFER_SIZE) _buffer;
+        strbuf_t buffer;
+    };
+    size_t buffer_capacity;
+    size_t buffer_space_left;
+} IPCReader;
+
+
+void IPCReader_init(IPCReader *reader) {
+    *reader = (IPCReader) { 0 };
+    STRBUF_STATIC_INIT2(GDBUFFER_SIZE, reader->_buffer);
+    reader->buffer_capacity = sizeof(reader->_buffer);
+    reader->buffer_space_left = reader->buffer_capacity;
+}
+
+
+/// @retval  0 OK, keep reading.
+/// @retval -1 No more lines.
+int _IPCReader_get_net_line(IPCReader *reader, strbuf_t *out_line) {
+    strbuf_t *src = &reader->buffer;
+    strview_t split_right = strbuf_view(&src);
+    strview_t split_left = strview_split_first_delim(&split_right, "\n", false);
+    if (split_left.size == 0 && split_right.size == 0) {
+        return -1;
+    }
+    strbuf_assign(&out_line, split_left);
+    strbuf_assign(&src, split_right);
+    return 0;
+}
+
+
+/// @retval  0 OK, keep reading.
+/// @retval -1 No more lines.
+int IPCReader_read_line(IPCReader *reader, int fd, strbuf_t *out_line) {
+    // got newline?
+    if (_IPCReader_get_net_line(reader, out_line) == 0) { return 0; }
+
+    // No new line, read until buffer full or can't read anymore.
+    ssize_t total_bytes_read = 0;
+    ssize_t bytes_read = 0;
+    do {
+        bytes_read = read(fd,
+                reader->buffer.cstr + bytes_read,
+                size_t_max(0, (size_t)reader->buffer.capacity -1 -(size_t)bytes_read));
+        if (bytes_read > 0) { total_bytes_read += bytes_read; }
+    } while (bytes_read > 0);
+
+    reader->buffer.cstr[total_bytes_read] = '\0';
+    {
+        strbuf_t *tmp = &reader->buffer;
+        strbuf_recalculate_size_as_cstr(&tmp);
+    }
+
+    // got newline?
+    if (_IPCReader_get_net_line(reader, out_line) == 0) { return 0; }
+    return -1;
+}
+
+
 int main (void) {
     printf("Hello there\n");
+
+    IPCReader reader = { 0 };
+    IPCReader_init(&reader);
+
+    strbuf_space_t(GDBUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDBUFFER_SIZE);
+    strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
 
     int master_to_child_pipe[2];
     int child_to_master_pipe[2];
@@ -49,40 +123,33 @@ int main (void) {
         // die on parent exit
         prctl(PR_SET_PDEATHSIG, SIGTERM);
 
-        // Example: exec grep that waits for input
-        /*execlp("cat", "cat", NULL);*/
         execlp("gdb", "gdb", NULL);
 
-        // If exec fails
+        // if all fails
         perror("exec");
         exit(1);
     }
 
-    // Parent process
-    close(master_to_child_pipe[0]);  // Parent doesn't read commands
-    close(child_to_master_pipe[1]); // Parent doesn't write results
+    close(master_to_child_pipe[0]);
+    close(child_to_master_pipe[1]);
 
-    // Set child→parent read end to non-blocking
+    // non-blocking
     int flags = fcntl(child_to_master_pipe[0], F_GETFL, 0);
     fcntl(child_to_master_pipe[0], F_SETFL, flags | O_NONBLOCK);
 
     // Write a command
-    /*const char *cmd = "foo123 test\n";*/
     const char *cmd = "file ../smb-raylib/build/3djump\n";
     long written_bytes = write(master_to_child_pipe[1], cmd, strlen(cmd));
     (void)written_bytes;
     printf("%ld bytes were written\n", written_bytes);
 
-    for (int i = 15; i > 1; --i) {
-        sleep(1); // simulate doing other work
+    for (int i = 50; i > 1; --i) {
+        sleep_ms(200);
 
-        // Try reading (non-blocking)
-        char buffer[256];
-        ssize_t n = read(child_to_master_pipe[0], buffer, sizeof(buffer) - 1);
-        if (n > 0) {
-            buffer[n] = '\0';
-            /*printf("Got output: %s", buffer);*/
-            printf("%s", buffer);
+        int error = IPCReader_read_line(&reader, child_to_master_pipe[0], aux_str);
+
+        if (error == 0) {
+            printf("--|%s\n", aux_str->cstr);
         } else {
             printf("\n");
             printf("\n");
@@ -103,5 +170,6 @@ int main (void) {
     close(master_to_child_pipe[1]);
     close(child_to_master_pipe[0]);
     wait(NULL);
+
     return 0;
 }

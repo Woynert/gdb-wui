@@ -48,7 +48,6 @@ mkShell { # for GCC
 
         clang-tools
         cacert # for downloading meson modules through SSL
-		busybox
 		git
         patchelf
         pax-utils # lddtree
