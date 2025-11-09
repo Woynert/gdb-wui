@@ -27,22 +27,18 @@ typedef struct IPCReader {
         strbuf_space_t(GDBUFFER_SIZE) _buffer;
         strbuf_t buffer;
     };
-    size_t buffer_capacity;
-    size_t buffer_space_left;
 } IPCReader;
 
 
 void IPCReader_init(IPCReader *reader) {
     *reader = (IPCReader) { 0 };
     STRBUF_STATIC_INIT2(GDBUFFER_SIZE, reader->_buffer);
-    reader->buffer_capacity = sizeof(reader->_buffer);
-    reader->buffer_space_left = reader->buffer_capacity;
 }
 
 
 /// @retval  0 OK, keep reading.
 /// @retval -1 No more lines.
-int _IPCReader_get_net_line(IPCReader *reader, strbuf_t *out_line) {
+int _IPCReader_get_new_line(IPCReader *reader, strbuf_t *out_line) {
     strbuf_t *src = &reader->buffer;
     strview_t split_right = strbuf_view(&src);
     strview_t split_left = strview_split_first_delim(&split_right, "\n", false);
@@ -59,7 +55,7 @@ int _IPCReader_get_net_line(IPCReader *reader, strbuf_t *out_line) {
 /// @retval -1 No more lines.
 int IPCReader_read_line(IPCReader *reader, int fd, strbuf_t *out_line) {
     // got newline?
-    if (_IPCReader_get_net_line(reader, out_line) == 0) { return 0; }
+    if (_IPCReader_get_new_line(reader, out_line) == 0) { return 0; }
 
     // No new line, read until buffer full or can't read anymore.
     ssize_t total_bytes_read = 0;
@@ -78,24 +74,23 @@ int IPCReader_read_line(IPCReader *reader, int fd, strbuf_t *out_line) {
     }
 
     // got newline?
-    if (_IPCReader_get_net_line(reader, out_line) == 0) { return 0; }
+    if (_IPCReader_get_new_line(reader, out_line) == 0) { return 0; }
     return -1;
 }
 
 
-int main (void) {
-    printf("Hello there\n");
-
-    IPCReader reader = { 0 };
-    IPCReader_init(&reader);
-
-    strbuf_space_t(GDBUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDBUFFER_SIZE);
-    strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
-
+typedef struct IPCCtx {
     int master_to_child_pipe[2];
     int child_to_master_pipe[2];
+} IPCCtx;
 
-    if (pipe(master_to_child_pipe) == -1 || pipe(child_to_master_pipe) == -1) {
+
+/// @retuns error
+int IPC_launch_gdb(IPCCtx *ctx) {
+    *ctx = (IPCCtx) { 0 };
+
+    if (pipe(ctx->master_to_child_pipe) == -1
+        || pipe(ctx->child_to_master_pipe) == -1) {
         perror("pipe");
         return 1;
     }
@@ -109,16 +104,16 @@ int main (void) {
     if (pid == 0) {
 
         // redirect stdin/stdout to pipe
-        if (dup2(master_to_child_pipe[0], STDIN_FILENO) == -1)
+        if (dup2(ctx->master_to_child_pipe[0], STDIN_FILENO) == -1)
             { perror("dup2"); _exit(1); };
-        if (dup2(child_to_master_pipe[1], STDOUT_FILENO) == -1)
+        if (dup2(ctx->child_to_master_pipe[1], STDOUT_FILENO) == -1)
             { perror("dup2"); _exit(1); };
 
         // close original pipe ends
-        close(master_to_child_pipe[1]);
-        close(master_to_child_pipe[0]);
-        close(child_to_master_pipe[0]);
-        close(child_to_master_pipe[1]);
+        close(ctx->master_to_child_pipe[1]);
+        close(ctx->master_to_child_pipe[0]);
+        close(ctx->child_to_master_pipe[0]);
+        close(ctx->child_to_master_pipe[1]);
 
         // die on parent exit
         prctl(PR_SET_PDEATHSIG, SIGTERM);
@@ -130,46 +125,81 @@ int main (void) {
         exit(1);
     }
 
-    close(master_to_child_pipe[0]);
-    close(child_to_master_pipe[1]);
+    close(ctx->master_to_child_pipe[0]);
+    close(ctx->child_to_master_pipe[1]);
 
     // non-blocking
-    int flags = fcntl(child_to_master_pipe[0], F_GETFL, 0);
-    fcntl(child_to_master_pipe[0], F_SETFL, flags | O_NONBLOCK);
+    int flags = fcntl(ctx->child_to_master_pipe[0], F_GETFL, 0);
+    fcntl(ctx->child_to_master_pipe[0], F_SETFL, flags | O_NONBLOCK);
+
+    return 0;
+}
+
+
+void IPC_process(IPCCtx *ctx) {
+}
+
+
+void IPC_cleanup(IPCCtx *ctx) {
+    close(ctx->master_to_child_pipe[1]);
+    close(ctx->child_to_master_pipe[0]);
+    wait(NULL);
+}
+
+
+int IPC_write_cmd(IPCCtx *ctx, strview_t cmd) {
+    long written_bytes = write(
+            ctx->master_to_child_pipe[1], cmd.data, (size_t)cmd.size);
+    (void)written_bytes;
+    printf("WRITE CMD: (%s) %ld bytes were written\n",
+            written_bytes == cmd.size ? "success" : "failure", written_bytes);
+    return written_bytes == cmd.size ? 0 : -1;
+}
+
+
+int main (void) {
+    printf("Hello there\n");
+
+    IPCCtx ipc_ctx = { 0 };
+    IPC_launch_gdb(&ipc_ctx);
+
+    IPCReader reader = { 0 };
+    IPCReader_init(&reader);
+
+    strbuf_space_t(GDBUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDBUFFER_SIZE);
+    strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
+
+    int error;
+    error = IPC_launch_gdb(&ipc_ctx);
+    ASSERT(error == 0);
 
     // Write a command
-    const char *cmd = "file ../smb-raylib/build/3djump\n";
-    long written_bytes = write(master_to_child_pipe[1], cmd, strlen(cmd));
-    (void)written_bytes;
-    printf("%ld bytes were written\n", written_bytes);
+    error = IPC_write_cmd(&ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
+    ASSERT(error == 0);
 
-    for (int i = 50; i > 1; --i) {
-        sleep_ms(200);
+    while(true) {
+        sleep_ms(50);
 
-        int error = IPCReader_read_line(&reader, child_to_master_pipe[0], aux_str);
+        error = IPCReader_read_line(
+                &reader, ipc_ctx.child_to_master_pipe[0], aux_str);
 
         if (error == 0) {
             printf("--|%s\n", aux_str->cstr);
         } else {
             printf("\n");
-            printf("\n");
             printf("................\n");
             printf("No output yet...\n");
             printf("................\n");
             printf("\n");
-            printf("\n");
 
-            const char *cmd_run = "b main\n";
-            written_bytes = write(master_to_child_pipe[1], cmd_run, strlen(cmd_run));
-            (void)written_bytes;
-            printf("%ld bytes were written\n", written_bytes);
+            error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));
+            ASSERT(error == 0);
         }
     }
 
     // Cleanup
-    close(master_to_child_pipe[1]);
-    close(child_to_master_pipe[0]);
-    wait(NULL);
+
+    /*Fork_cleanup(&fork_ctx);*/
 
     return 0;
 }
