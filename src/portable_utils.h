@@ -6,15 +6,15 @@
 #include "stdlib.h"  // exit
 #include "math.h"
 
-inline size_t size_t_max(size_t a, size_t b) { return a > b ? a : b; }
-inline size_t size_t_min(size_t a, size_t b) { return a < b ? a : b; }
-inline size_t size_t_clamp(size_t min, size_t max, size_t value) {
+static inline size_t size_t_max(size_t a, size_t b) { return a > b ? a : b; }
+static inline size_t size_t_min(size_t a, size_t b) { return a < b ? a : b; }
+static inline size_t size_t_clamp(size_t min, size_t max, size_t value) {
     return size_t_max(min, size_t_min(max, value)); }
-inline int int_max(int a, int b) { return a > b ? a : b; }
-inline int int_min(int a, int b) { return a < b ? a : b; }
-inline int int_clamp(int min, int max, int value) {
+static inline int int_max(int a, int b) { return a > b ? a : b; }
+static inline int int_min(int a, int b) { return a < b ? a : b; }
+static inline int int_clamp(int min, int max, int value) {
     return int_max(min, int_min(max, value)); }
-inline float float_clamp(float min, float max, float value) {
+static inline float float_clamp(float min, float max, float value) {
     return fmaxf(min, fminf(max, value)); }
 
 #ifdef WIN32

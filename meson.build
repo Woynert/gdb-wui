@@ -69,6 +69,8 @@ scroll_exe = executable(
   'scroll'
   ,'src/scroll.c'
   ,dependencies : [
+    mickstr_dep,
+    math_dep
     #raylib_dep,
     #math_dep,
     #raygui_dep
