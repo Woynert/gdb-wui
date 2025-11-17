@@ -20,11 +20,12 @@ int main(void) {
             CliPrompt_print_line(&cli_prompt, "[status] tick %ld\n", now);
         }
 
-        CliPrompt_handle_prompt(&cli_prompt);
-        if (cli_prompt.event_submit) {
+        int i = 5;
+        while (CliPrompt_handle_prompt(&cli_prompt)) {
             /*printf("\nCommand: [%s]\n", cli_prompt.input.cstr);*/
             CliPrompt_print_line(&cli_prompt, "Command: [%s]\n", cli_prompt.input.cstr);
             CliPrompt_clear(&cli_prompt);
+            if (--i, i < 0) { break; }
         }
 
         sleep_ms(50);

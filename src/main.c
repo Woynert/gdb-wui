@@ -2,6 +2,7 @@
 #include "raygui.h"
 
 #include "stdio.h"
+#include "signal.h"
 #include "stdlib.h"
 #include "unistd.h"
 #include "string.h"
@@ -10,6 +11,7 @@
 #include "strbuf_extra.h"
 #include "portable_utils.h"
 #include "sys/wait.h"
+#include "cli_prompt.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,6 +82,7 @@ int IPCReader_read_line(IPCReader *reader, int fd, strbuf_t *out_line) {
 
 
 typedef struct IPCCtx {
+    int child_pid;
     int master_to_child_pipe[2];
     int child_to_master_pipe[2];
 } IPCCtx;
@@ -96,6 +99,7 @@ int IPC_launch_gdb(IPCCtx *ctx) {
     }
 
     pid_t pid = fork();
+    ctx->child_pid = pid;
     if (pid == -1) {
         perror("fork");
         return 1;
@@ -151,8 +155,7 @@ int IPC_write_cmd(IPCCtx *ctx, strview_t cmd) {
     long written_bytes = write(
             ctx->master_to_child_pipe[1], cmd.data, (size_t)cmd.size);
     (void)written_bytes;
-    printf("WRITE CMD: (%s) %ld bytes were written\n",
-            written_bytes == cmd.size ? "success" : "failure", written_bytes);
+    printf("\n");
     return written_bytes == cmd.size ? 0 : -1;
 }
 
@@ -165,6 +168,9 @@ int main (void) {
 
     IPCReader reader = { 0 };
     IPCReader_init(&reader);
+
+    CliPrompt cli_prompt = { 0 };
+    CliPrompt_setup(&cli_prompt);
 
     strbuf_space_t(GDBUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDBUFFER_SIZE);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
@@ -183,17 +189,24 @@ int main (void) {
         error = IPCReader_read_line(
                 &reader, ipc_ctx.child_to_master_pipe[0], aux_str);
 
-        if (error == 0) {
-            printf("--|%s\n", aux_str->cstr);
-        } else {
-            printf("\n");
-            printf("................\n");
-            printf("No output yet...\n");
-            printf("................\n");
-            printf("\n");
 
-            error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));
-            ASSERT(error == 0);
+        if (error == 0) {
+            CliPrompt_print_line(&cli_prompt, "|- %s\n", aux_str->cstr);
+        } else {
+            while (CliPrompt_handle_prompt(&cli_prompt)) {
+
+                {
+                    strbuf_t *tmp = &cli_prompt.input;
+                    strbuf_cat(&aux_str, strbuf_view(&tmp), cstr("\n"));
+                }
+                error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
+                ASSERT(error == 0);
+
+                CliPrompt_clear(&cli_prompt);
+            }
+            /*
+            kill(ipc_ctx.child_pid, SIGINT);
+            */
         }
     }
 

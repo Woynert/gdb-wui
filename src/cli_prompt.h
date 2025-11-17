@@ -23,7 +23,6 @@ typedef struct CliPrompt {
        strbuf_t input;
     };
     uint _cursor;
-    bool event_submit;
 } CliPrompt;
 
 void _CliPrompt_restore_terminal(void) {
@@ -55,7 +54,7 @@ static void _CliPrompt_clear_line(void) {
 
 void _CliPrompt_refresh_draw(CliPrompt *prompt) {
    _CliPrompt_clear_line();
-   printf("> %s", prompt->input.cstr);
+   printf(">>> %s", prompt->input.cstr);
    fflush(stdout);
 
    // update cursor position
@@ -82,28 +81,25 @@ static int _CliPrompt_string_find_last_char(char *str, int str_len, char ch) {
    return -1;
 }
 
-void CliPrompt_handle_prompt(CliPrompt *prompt) {
+bool CliPrompt_handle_prompt(CliPrompt *prompt) {
 
    strbuf_t *input = &prompt->input;
    uint cursor = prompt->_cursor;
    bool reposition_cursor = false;
+   bool user_submitted = false;
 
    long unused;
    unsigned char ch;
-   ssize_t n = read(STDIN_FILENO, &ch, 1);
+   ssize_t n;
 
-   do {
-      if (n <= 0) return;
+   for (int i = 100; --i > 0;) // max reads per cycle
+   {
+      n = read(STDIN_FILENO, &ch, 1);
+      if (n <= 0) break;
 
       // Enter
       if (ch == '\n') {
-         //_CliPrompt_clear_line();
-         //printf("Command received: [%s]\n", input->cstr);
-         //strbuf_assign(&input, cstr(""));
-         //cursor = 0;
-         //printf("> ");
-         //fflush(stdout);
-         prompt->event_submit = true;
+         user_submitted = true;
          break;
       }
 
@@ -115,7 +111,7 @@ void CliPrompt_handle_prompt(CliPrompt *prompt) {
             ++cursor;
             reposition_cursor = true;
          }
-         break;
+         continue;
       }
 
       // Backspace
@@ -125,7 +121,7 @@ void CliPrompt_handle_prompt(CliPrompt *prompt) {
             --cursor;
             reposition_cursor = true;
          }
-         break;
+         continue;
       }
 
       // Ctrl+W
@@ -139,20 +135,20 @@ void CliPrompt_handle_prompt(CliPrompt *prompt) {
          strbuf_pop_at_index(&input, erase_from, erase_length);
          cursor -= (uint)erase_length;
          reposition_cursor = true;
-         break;
+         continue;
       }
 
       // Escape sequences
       if (ch != 0x1B) {
-         break;
+         continue;
       }
       unsigned char seq[5];
       ssize_t r = read(STDIN_FILENO, &seq[0], 1);
       if (r <= 0 || seq[0] != '[') {
-         break;
+         continue;
       }
       if (read(STDIN_FILENO, &seq[1], 1) <= 0) {
-         break;
+         continue;
       }
       switch (seq[1]) {
          case 'A': break; // Up
@@ -212,7 +208,7 @@ void CliPrompt_handle_prompt(CliPrompt *prompt) {
              break;
          default: break;
       }
-   } while (0);
+   }
 
    prompt->_cursor = cursor;
 
@@ -220,6 +216,7 @@ void CliPrompt_handle_prompt(CliPrompt *prompt) {
       _CliPrompt_refresh_draw(prompt);
    }
    (void)unused;
+   return user_submitted;
 }
 
 void CliPrompt_print_line(CliPrompt *prompt, const char *restrict format, ...) {
@@ -239,7 +236,6 @@ void CliPrompt_clear(CliPrompt *prompt) {
       strbuf_assign(&tmp, cstr(""));
    }
    prompt->_cursor = 0;
-   prompt->event_submit = false;
    _CliPrompt_refresh_draw(prompt);
 }
 
