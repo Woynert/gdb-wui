@@ -17,7 +17,7 @@ my_extra_args = [
   '-Wconversion',
   '-Wno-language-extension-token',
   '-Werror=incompatible-pointer-types',
-  '-Wc++-compat',
+  #'-Wc++-compat',
 
   '-Wno-type-limits',
   '-Wno-error=float-equal',
@@ -56,6 +56,7 @@ xcb_keysyms_dep = dependency('xcb-keysyms')
 gdbwui_exe = executable(
   'gdbwui'
   ,'src/main.c'
+  ,'src/gdb_woy_api_imp.c'
   ,dependencies : [
     raylib_dep,
     math_dep,

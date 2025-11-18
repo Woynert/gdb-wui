@@ -81,6 +81,8 @@ static int _CliPrompt_string_find_last_char(char *str, int str_len, char ch) {
    return -1;
 }
 
+/// @retvar true  User pressed enter.
+/// @retvar false Nothing happened, keep reading.
 bool CliPrompt_handle_prompt(CliPrompt *prompt) {
 
    strbuf_t *input = &prompt->input;
