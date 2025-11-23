@@ -14,6 +14,7 @@
 #include "cli_prompt.h"
 #include "gdb_woy_api.h"
 #include "woy_interpreter.h"
+#include "wui_state.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -205,7 +206,8 @@ enum IPC_WAIT_DO {
 
 /// BLOCKS until gdb prompt is found
 /// @note Prints all output
-void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prompt, enum IPC_WAIT_DO ipc_do) {
+void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prompt, enum IPC_WAIT_DO ipc_do, WuiState *wui_state) {
+    /// TODO: Sort arguments
 
     strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
@@ -248,7 +250,7 @@ void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prom
             CliPrompt_print_line(cli_prompt, "|- %s\n", "<<<INSERTING>>>");
 
             if (ipc_do == IPC_WAIT_DO_READ_WOY_BREAKPOINTS) {
-                WoyInterp_interpret_breakpoints(&woy_interp);
+                WoyInterp_interpret_breakpoints(&woy_interp, wui_state);
                 WoyInterp_reset(&woy_interp);
             }
 
@@ -276,6 +278,9 @@ int main (void) {
         .size = (int)PYTHON_CODE_len
     };
 
+    WuiState wui_state = { 0 };
+    WuiState_init(&wui_state);
+
     IPCCtx ipc_ctx = { 0 };
     IPC_launch_gdb(&ipc_ctx);
 
@@ -292,33 +297,33 @@ int main (void) {
     error = IPC_launch_gdb(&ipc_ctx);
     ASSERT(error == 0);
 
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
     error = IPC_write_cmd(&ipc_ctx, cstr("python\n"));
     error = IPC_write_cmd(&ipc_ctx, python_code_view);
     error = IPC_write_cmd(&ipc_ctx, cstr("end\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_HIDE);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_HIDE, NULL);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("b Server_physic_step\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
 
 
     error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_breakpoints()\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS, &wui_state);
     // After calling a 'WOY API' command, clear the GDB previous command
     error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
 
     while(true) {
         sleep_ms(50);
@@ -332,7 +337,7 @@ int main (void) {
             error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
             ASSERT(error == 0);
             CliPrompt_clear(&cli_prompt);
-            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
         }
     }
 

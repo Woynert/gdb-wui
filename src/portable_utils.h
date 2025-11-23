@@ -45,4 +45,6 @@ void sleep_ms(int milliseconds){
         } \
     } while (0)
 
+#define PRIbool(arg) (arg ? "true" : "false")
+
 #endif
