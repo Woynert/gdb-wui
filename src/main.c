@@ -216,13 +216,7 @@ void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prom
     /*TODO: if ipc_do != NOTHING or HIDE*/
     WoyInterp woy_interp = { 0 };
     WoyInterp_init(&woy_interp);
-    switch (ipc_do) {
-        case IPC_WAIT_DO_READ_WOY_BREAKPOINTS:
-            WoyInterp_reset(&woy_interp);
-            break;
-        default:
-            break;
-    }
+    WoyInterp_reset(&woy_interp);
 
 
     int error;
@@ -251,8 +245,11 @@ void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prom
 
             if (ipc_do == IPC_WAIT_DO_READ_WOY_BREAKPOINTS) {
                 WoyInterp_interpret_breakpoints(&woy_interp, wui_state);
-                WoyInterp_reset(&woy_interp);
             }
+            else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
+                WoyInterp_interpret_symbols(&woy_interp, wui_state);
+            }
+            WoyInterp_reset(&woy_interp);
 
             return;
         }
@@ -316,10 +313,32 @@ int main (void) {
     ASSERT(error == 0);
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
 
+    error = IPC_write_cmd(&ipc_ctx, cstr("run\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+
 
     error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_breakpoints()\n"));
     ASSERT(error == 0);
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS, &wui_state);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+
+
+    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_locals()\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+
+
+    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state);
     // After calling a 'WOY API' command, clear the GDB previous command
     error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);

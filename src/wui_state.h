@@ -32,17 +32,54 @@ void WuiBreakpoint_init (WuiBreakpoint *bp) {
 }
 
 
+#define WUI_SYMBOL_VALUE_STR_SIZE 100
+
+typedef struct WuiSymbol {
+    uint basic_type;
+    union {
+        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _type_name;
+        strbuf_t type_name;
+    };
+    union {
+        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _symbol_name;
+        strbuf_t symbol_name;
+    };
+    union {
+        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _value;
+        strbuf_t value;
+    };
+    union {
+        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _address;
+        strbuf_t address;
+    };
+} WuiSymbol;
+
+void WuiSymbol_init (WuiSymbol *wui_symbol) {
+    wui_symbol->basic_type = 0;
+    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_type_name);
+    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_symbol_name);
+    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_value);
+    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_address);
+}
+
+
 #define DYN_ARR_TYPE WuiBreakpoint
+#include "./containers/da.h"
+#undef DYN_ARR_TYPE
+
+#define DYN_ARR_TYPE WuiSymbol
 #include "./containers/da.h"
 #undef DYN_ARR_TYPE
 
 
 typedef struct WuiState {
     WuiBreakpoint_DynArr breakpoints;
+    WuiSymbol_DynArr symbols;
 } WuiState;
 
 void WuiState_init (WuiState *wui_state) {
     wui_state->breakpoints = WuiBreakpoint_DynArr_create();
+    wui_state->symbols = WuiSymbol_DynArr_create();
 }
 
 #endif // !WUI_STATE

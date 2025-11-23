@@ -19,6 +19,7 @@ def _woy_print_gdb_value(value: gdb.Value, name: str):
         except Exception as e:
             pass
 
+    print("vvv")
     print(basic_type.code)
     print(value.type)
     print(name)
@@ -90,7 +91,7 @@ def woy_query_symbol(exp_str: str, page: int = 0) -> None:
     # check for user hook
     hook_func_name = f"woy_hook_{str(value.type)}"
     if _woy_func_exists(hook_func_name):
-        print("Yes the function exists")
+        # print("Yes the function exists")
         globals()[hook_func_name](value, exp_str)
 
     elif basic_type.code == gdb.TYPE_CODE_STRUCT or basic_type.code == gdb.TYPE_CODE_UNION:
@@ -161,32 +162,33 @@ RESPONSE:
 1   success: bool              # if false, stop reading
 
     {
-2   symbol_basic_type: int
-3   symbol_type_name: string
-4   symbol_name: string
-5   symbol_value: char[100]    # always filled
-6   symbol_address: char[100]  # always filled
+2   vvv                        # control sequence
+3   symbol_basic_type: int
+4   symbol_type_name: string
+5   symbol_name: string
+6   symbol_value: char[100]    # always filled
+7   symbol_address: char[100]  # always filled
     }
-
-#### 7   vvv # reserved
 
     # Multiple extra fields if symbol_basic_type == STRUCT: Multiple fields
     {
-8   symbol_basic_type: int
-9   symbol_type_name: string
-10   symbol_name: string
-11  symbol_value: char[100]
-12  symbol_address: char[100]
+8   vvv
+9   symbol_basic_type: int
+10  symbol_type_name: string
+11  symbol_name: string
+12  symbol_value: char[100]
+13  symbol_address: char[100]
     }
     # ... More fields
 
     # Multiple items if symbol_basic_type == ARRAY
     {
-8   symbol_basic_type: int     # same as parent
-9   symbol_type_name: string   # same as parent
-10   symbol_name: string        # contains index e.g: `gs.players[3]`
-11  symbol_value: char[100]
-12  symbol_address: char[100]
+8   vvv
+9   symbol_basic_type: int     # same as parent
+10  symbol_type_name: string   # same as parent
+11  symbol_name: string        # contains index e.g: `gs.players[3]`
+12  symbol_value: char[100]
+13  symbol_address: char[100]
     }
     # ... More fields
 
