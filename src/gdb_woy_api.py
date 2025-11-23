@@ -132,6 +132,9 @@ def woy_get_breakpoints():
 ## THIS MUST BE DEFINED SOMEWHERE ELSE
 
 def woy_hook_EntityInfo_ConMap(value: gdb.Value, name: str):
+    # TODO: Handle the case where it's not initialized (garbage values)
+    # It will iterate indefinitely
+
     # iterate all nodes
     for i in range(int(value["_size"])):
         node: gdb.Value = value["_nodes"][i]
@@ -151,7 +154,9 @@ def woy_hook_EntityInfo_ConMap(value: gdb.Value, name: str):
 Protocol:
 
 -------------------------------------------------------------------
-QUERY: py woy_locals() / py woy_query_symbol(expression)
+QUERY:
+    py woy_locals()
+    py woy_query_symbol(expression)
 RESPONSE:
 1   success: bool              # if false, stop reading
 
@@ -196,7 +201,7 @@ RESPONSE:
 4   (int) Breakpoint is enabled (0|1)
 5   (string) Breakpoint location
 6   (string) Breakpoint file
-7   (string) Breakpoint line
+7   (int) Breakpoint line
     }
 
 

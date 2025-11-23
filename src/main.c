@@ -13,6 +13,7 @@
 #include "sys/wait.h"
 #include "cli_prompt.h"
 #include "gdb_woy_api.h"
+#include "woy_interpreter.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,12 +23,12 @@
 #include <sys/wait.h>
 #include <sys/prctl.h>
 
-#define GDBUFFER_SIZE 4096
+#define GDB_BUFFER_SIZE 4096
 
 
 typedef struct IPCReader {
     union {
-        strbuf_space_t(GDBUFFER_SIZE) _buffer;
+        strbuf_space_t(GDB_BUFFER_SIZE) _buffer;
         strbuf_t buffer;
     };
 } IPCReader;
@@ -35,7 +36,7 @@ typedef struct IPCReader {
 
 void IPCReader_init(IPCReader *reader) {
     *reader = (IPCReader) { 0 };
-    STRBUF_STATIC_INIT2(GDBUFFER_SIZE, reader->_buffer);
+    STRBUF_STATIC_INIT2(GDB_BUFFER_SIZE, reader->_buffer);
 }
 
 
@@ -193,24 +194,64 @@ void IPC_cleanup(IPCCtx *ctx) {
     wait(NULL);
 }
 
+enum IPC_WAIT_DO {
+    IPC_WAIT_DO_NOTHING,
+    IPC_WAIT_DO_HIDE,
+    IPC_WAIT_DO_READ_WOY_BREAKPOINTS,
+    IPC_WAIT_DO_READ_WOY_LOCALS,
+    IPC_WAIT_DO_READ_WOY_QUERY,
+};
+
 
 /// BLOCKS until gdb prompt is found
 /// @note Prints all output
-void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prompt) {
+void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prompt, enum IPC_WAIT_DO ipc_do) {
 
-    strbuf_space_t(GDBUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDBUFFER_SIZE);
+    strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
+
+
+    /*TODO: if ipc_do != NOTHING or HIDE*/
+    WoyInterp woy_interp = { 0 };
+    WoyInterp_init(&woy_interp);
+    switch (ipc_do) {
+        case IPC_WAIT_DO_READ_WOY_BREAKPOINTS:
+            WoyInterp_reset(&woy_interp);
+            break;
+        default:
+            break;
+    }
+
 
     int error;
     while(true) {
         sleep_ms(50);
         error = _IPCReader_read_line(
                 reader, ipc_ctx->child_to_master_pipe[0], aux_str);
-        if (error != -1) {
-            CliPrompt_print_line(cli_prompt, "|- %s|\n", aux_str->cstr);
+        if (error == 0) {
+            if (ipc_do != IPC_WAIT_DO_HIDE) {
+                CliPrompt_print_line(cli_prompt, "|- %s\n", aux_str->cstr);
+            }
+            if (ipc_do != IPC_WAIT_DO_NOTHING) {
+                WoyInterp_push_line(&woy_interp, strbuf_view(&aux_str));
+            }
         }
-        if (error == 1) {
-            CliPrompt_print_line(cli_prompt, "|- %s|\n", "<<<INSERTING>>>");
+
+        // finish reading
+        else if (error == 1) {
+            if (ipc_do == IPC_WAIT_DO_HIDE) {
+                CliPrompt_print_line(cli_prompt, "|- %s\n", "(gdb)");
+            }
+            else {
+                CliPrompt_print_line(cli_prompt, "|- %s\n", aux_str->cstr);
+            }
+            CliPrompt_print_line(cli_prompt, "|- %s\n", "<<<INSERTING>>>");
+
+            if (ipc_do == IPC_WAIT_DO_READ_WOY_BREAKPOINTS) {
+                WoyInterp_interpret_breakpoints(&woy_interp);
+                WoyInterp_reset(&woy_interp);
+            }
+
             return;
         }
     }
@@ -230,6 +271,11 @@ int main (void) {
     printf("Hello there\n");
     printf("PYTHON_CODE(len %zu), [%.*s]\n", PYTHON_CODE_len, 100, PYTHON_CODE);
 
+    strview_t python_code_view = {
+        .data = PYTHON_CODE,
+        .size = (int)PYTHON_CODE_len
+    };
+
     IPCCtx ipc_ctx = { 0 };
     IPC_launch_gdb(&ipc_ctx);
 
@@ -239,17 +285,40 @@ int main (void) {
     CliPrompt cli_prompt = { 0 };
     CliPrompt_setup(&cli_prompt);
 
-    strbuf_space_t(GDBUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDBUFFER_SIZE);
+    strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
 
     int error;
     error = IPC_launch_gdb(&ipc_ctx);
     ASSERT(error == 0);
 
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt);
-    error = IPC_write_cmd(&ipc_ctx, cstr("help\n"));
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+    error = IPC_write_cmd(&ipc_ctx, cstr("python\n"));
+    error = IPC_write_cmd(&ipc_ctx, python_code_view);
+    error = IPC_write_cmd(&ipc_ctx, cstr("end\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_HIDE);
+
+    error = IPC_write_cmd(&ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+
+    error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+
+    error = IPC_write_cmd(&ipc_ctx, cstr("b Server_physic_step\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
+
+
+    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_breakpoints()\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
 
     while(true) {
         sleep_ms(50);
@@ -263,7 +332,7 @@ int main (void) {
             error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
             ASSERT(error == 0);
             CliPrompt_clear(&cli_prompt);
-            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt);
+            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING);
         }
     }
 
