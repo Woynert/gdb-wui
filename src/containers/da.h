@@ -25,6 +25,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 typedef struct {
     size_t size;
@@ -55,12 +56,12 @@ static inline size_t PRE(DynArr_insert) (PRE(DynArr) *da, TYPE item) {
     return da->size -1;
 }
 
+
 /// @returns error
-static int PRE(DynArr_insert_at) (PRE(DynArr) *da, size_t index, TYPE item) {
+static int PRE(DynArr_overwrite_at) (PRE(DynArr) *da, size_t index, TYPE item) {
     if (index >= da->size) {
         return -1;
     }
-
     da->items[index] = item;
     return OK;
 }
@@ -82,7 +83,7 @@ static size_t PRE(DynArr_get_size) (PRE(DynArr) *da) {
 /// @retval  0 OK
 /// @retval -1 Not found
 static int PRE(DynArr_remove_at) (PRE(DynArr) *da, size_t index) {
-    if (index < 0 || index >= da->size){
+    if (index >= da->size){
         return -1;
     }
 
@@ -106,6 +107,31 @@ static void PRE(DynArr_clear_preserving_capacity) (PRE(DynArr) *da) {
 }
 
 
+/// @returns error
+static int PRE(DynArr_insert_and_memmove_at) (PRE(DynArr) *da, size_t index, TYPE item) {
+    if (index > da->size) {
+        return -1;
+    }
+    PRE(DynArr_insert)(da, (TYPE){0}); // ensure space
+    memmove(da->items +index +1, da->items +index, sizeof(TYPE) * (da->size -1 -index));
+    da->items[index] = item;
+    return OK;
+}
+/// @returns error
+static int PRE(DynArr_insert_and_memmove_after) (PRE(DynArr) *da, size_t index, TYPE item) {
+    return PRE(DynArr_insert_and_memmove_at)(da, index+1, item);
+}
+/// @returns error
+static int PRE(DynArr_pop_and_memmove_at) (PRE(DynArr) *da, size_t index) {
+    if (index > da->size) {
+        return -1;
+    }
+    memmove(da->items +index, da->items +index +1, sizeof(TYPE) * (da->size -index));
+    --da->size;
+    return OK;
+}
+
+
 typedef struct {
     size_t  __next_index;
     size_t  index;
@@ -118,7 +144,7 @@ typedef struct {
 /// @retval -1 End reached
 static int PRE(DynArr_iterator_get_next) (PRE(DynArr) *da, PRE(DynArrIterator) *it)
 {
-    if (it->__next_index < 0 || it->__next_index >= da->size) {
+    if (it->__next_index >= da->size) {
         it->item = NULL;
         return -1;
     }

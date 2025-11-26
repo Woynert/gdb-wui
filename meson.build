@@ -92,6 +92,16 @@ file_list_exe = executable(
   ,c_args : my_extra_args
 )
 
+tree_exe = executable(
+  'tree'
+  ,'src/tree.c'
+  ,dependencies : [
+    math_dep,
+    mickstr_dep
+  ]
+  ,c_args : my_extra_args
+)
+
 #itinywm_exe = executable(
   #'itinywm'
   #,'src/lab/ittywm.c'
