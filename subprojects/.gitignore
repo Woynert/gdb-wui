@@ -1,0 +1,15 @@
+# Ignore everything.
+/**
+
+# Explicitly add tracked files:
+
+!/.gitignore
+!/fetch-deps.sh
+
+!/mickstr/
+!/mickstr/meson.build
+!/mickstr/mickstr_implementation.c
+
+!/raygui/
+!/raygui/meson.build
+!/raygui/raygui_implementation.c

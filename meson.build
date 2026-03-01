@@ -32,11 +32,6 @@ my_extra_args = [
 
 cc = meson.get_compiler('c')
 math_dep = cc.find_library('m', required : false)
-raylib_dep = dependency('raylib')
-
-raygui_proj = subproject('raygui',
-  default_options: [ 'default_library=shared' ])
-raygui_dep = raygui_proj.get_variable('raygui_dep')
 
 cwalk_proj = subproject('cwalk',
   default_options: [ 'default_library=shared' ])
@@ -46,10 +41,16 @@ mickstr_proj = subproject('mickstr',
   default_options: [ 'default_library=shared' ])
 mickstr_dep = mickstr_proj.get_variable('mickstr_dep')
 
-x11_dep = dependency('x11')
-xcb_dep = dependency('xcb')
-xcb_util_dep = dependency('xcb-util')
-xcb_keysyms_dep = dependency('xcb-keysyms')
+cmake = import('cmake')
+raylib_opts = cmake.subproject_options()
+raylib_opts.add_cmake_defines({'PLATFORM': 'Desktop'})
+raylib_opts.add_cmake_defines({'BUILD_EXAMPLES': false})
+raylib_proj = cmake.subproject('raylib', options: raylib_opts)
+raylib_dep = raylib_proj.dependency('raylib')
+
+raygui_proj = subproject('raygui',
+  default_options: [ 'default_library=static' ])
+raygui_dep = raygui_proj.get_variable('raygui_dep')
 
 # artifacts
 
@@ -72,9 +73,6 @@ scroll_exe = executable(
   ,dependencies : [
     mickstr_dep,
     math_dep
-    #raylib_dep,
-    #math_dep,
-    #raygui_dep
   ]
   ,c_args : my_extra_args
 )
@@ -101,39 +99,3 @@ tree_exe = executable(
   ]
   ,c_args : my_extra_args
 )
-
-#itinywm_exe = executable(
-  #'itinywm'
-  #,'src/lab/ittywm.c'
-  #,dependencies : [
-    #math_dep,
-    #xcb_dep,
-    #xcb_util_dep,
-  #]
-  ##,c_args : my_extra_args
-#)
-
-#tinywm_exe = executable(
-  #'tinywm'
-  #,'src/lab/tinywm.c'
-  #,dependencies : [
-    #math_dep,
-    #x11_dep
-  #]
-  ##,c_args : my_extra_args
-#)
-
-#xwm_exe = executable(
-  #'xwm'
-  #,'src/lab/xwm/xwm.c'
-  #,dependencies : [
-    #math_dep,
-    #xcb_dep,
-    ##xcb_util_dep,
-    #xcb_keysyms_dep
-  #]
-  ##,c_args : my_extra_args
-#)
-
-#-I/nix/store/94pix4pzamq3svx4jxjj2sgrvafn29b8-libxcb-1.17.0-dev/include
-
