@@ -1,3 +1,6 @@
+#ifndef WOY_INTERPRETER_H
+#define WOY_INTERPRETER_H
+
 #include "strbuf.h"
 #include "strview.h"
 #include "strbuf_extra.h"
@@ -156,3 +159,5 @@ int WoyInterp_interpret_symbols(
 
    return 0;
 }
+
+#endif // !WOY_INTERPRETER_H
