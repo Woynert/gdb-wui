@@ -1,21 +1,3 @@
-#include "stdio.h"
-#include "raygui.h"
-
-#include "stdio.h"
-#include "signal.h"
-#include "stdlib.h"
-#include "unistd.h"
-#include "string.h"
-#include "strbuf.h"
-#include "strview.h"
-#include "strbuf_extra.h"
-#include "portable_utils.h"
-#include "sys/wait.h"
-#include "cli_prompt.h"
-#include "gdb_woy_api.h"
-#include "woy_interpreter.h"
-#include "wui_state.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +5,20 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sys/prctl.h>
+#include <signal.h>
+
+#include "raygui.h"
+#include "strbuf.h"
+#include "strview.h"
+#include "strbuf_extra.h"
+#include "portable_utils.h"
+#include "cli_prompt.h"
+
+#include "gui.h"
+#include "gdb_woy_api.h"
+#include "woy_interpreter.h"
+#include "wui_state.h"
+
 
 #define GDB_BUFFER_SIZE 4096
 
@@ -204,9 +200,18 @@ enum IPC_WAIT_DO {
 };
 
 
+/// @param symbol_id. Optional. Only if ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS
+///                             or ipc_do == IPC_WAIT_DO_READ_WOY_QUERY
 /// BLOCKS until gdb prompt is found
 /// @note Prints all output
-void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prompt, enum IPC_WAIT_DO ipc_do, WuiState *wui_state) {
+void IPC_wait_for_prompt(
+    IPCCtx *ipc_ctx,
+    IPCReader* reader,
+    CliPrompt *cli_prompt,
+    enum IPC_WAIT_DO ipc_do,
+    WuiState *wui_state,
+    uint symbol_id
+) {
     /// TODO: Sort arguments
 
     strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
@@ -247,7 +252,8 @@ void IPC_wait_for_prompt(IPCCtx *ipc_ctx, IPCReader* reader, CliPrompt *cli_prom
                 WoyInterp_interpret_breakpoints(&woy_interp, wui_state);
             }
             else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
-                WoyInterp_interpret_symbols(&woy_interp, wui_state);
+                int err = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
+                ASSERT(err == 0);
             }
             WoyInterp_reset(&woy_interp);
 
@@ -294,58 +300,140 @@ int main (void) {
     error = IPC_launch_gdb(&ipc_ctx);
     ASSERT(error == 0);
 
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
     error = IPC_write_cmd(&ipc_ctx, cstr("python\n"));
     error = IPC_write_cmd(&ipc_ctx, python_code_view);
     error = IPC_write_cmd(&ipc_ctx, cstr("end\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_HIDE, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_HIDE, NULL, 0);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("b Server_physic_step\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
     error = IPC_write_cmd(&ipc_ctx, cstr("run\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
 
     error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_breakpoints()\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS, &wui_state);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS, &wui_state, 0);
     // After calling a 'WOY API' command, clear the GDB previous command
     error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
 
     error = IPC_write_cmd(&ipc_ctx, cstr("py woy_locals()\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, 0);
     // After calling a 'WOY API' command, clear the GDB previous command
     error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+
+    // find a symbol of type struct
+    for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {
+        WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;
+        if (symbol->basic_type == 3) {
+            uint node_id = wui_state.symbol_tree.nodes.items[i].id;
+
+            printf("Found struct [%s]\n", symbol->symbol_name.cstr);
+
+            {
+                strbuf_t *tmp = &symbol->symbol_name;
+                strbuf_cat(
+                    &aux_str,
+                    cstr("py woy_query_symbol(\""),
+                    strbuf_view(&tmp),
+                    cstr("\")\n")
+                );
+            }
+
+            printf("QUERY string [%s]\n", aux_str->cstr);
+
+/*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
+error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
+ASSERT(error == 0);
+IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);
+// After calling a 'WOY API' command, clear the GDB previous command
+error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+ASSERT(error == 0);
+IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {
+        WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;
+        if (wui_state.symbol_tree.nodes.items[i].id == 7) {
+            uint node_id = wui_state.symbol_tree.nodes.items[i].id;
+
+            printf("Found struct [%s]\n", symbol->symbol_name.cstr);
+
+            {
+                strbuf_t *tmp = &symbol->symbol_name;
+                strbuf_cat(
+                    &aux_str,
+                    cstr("py woy_query_symbol(\""),
+                    strbuf_view(&tmp),
+                    cstr("\")\n")
+                );
+            }
+
+            printf("QUERY string [%s]\n", aux_str->cstr);
+
+/*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
+error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
+ASSERT(error == 0);
+IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);
+// After calling a 'WOY API' command, clear the GDB previous command
+error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+ASSERT(error == 0);
+IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+
+            break;
+        }
+    }
 
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state);
-    // After calling a 'WOY API' command, clear the GDB previous command
-    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+    /*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
+    /*ASSERT(error == 0);*/
+    /*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_QUERY, &wui_state, 1);*/
+    /*// After calling a 'WOY API' command, clear the GDB previous command*/
+    /*error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));*/
+    /*ASSERT(error == 0);*/
+    /*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
 
-    while(true) {
-        sleep_ms(50);
+
+    // Raylib stuff
+    const int screenWidth = 400;
+    const int screenHeight = 400;
+    InitWindow(screenWidth, screenHeight, "WUI");
+    SetTargetFPS(60);
+    while (!WindowShouldClose()) // Detect window close button or ESC key
+    {
+
+        BeginDrawing();
+        ClearBackground(DARKGRAY);
+        DrawFPS(0,0);
+        GUI_draw();
+        EndDrawing();
+
+    /*while(true) {*/
+        /*sleep_ms(50);*/
+        /*CliPrompt_print_line(&cli_prompt, "i\n");*/
+        // Logic loop
 
         while (CliPrompt_handle_prompt(&cli_prompt)) {
 
@@ -356,7 +444,7 @@ int main (void) {
             error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
             ASSERT(error == 0);
             CliPrompt_clear(&cli_prompt);
-            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL);
+            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
         }
     }
 

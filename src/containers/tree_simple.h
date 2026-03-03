@@ -47,12 +47,10 @@ typedef struct {
     TREESI__TYPE item;
 } TREESI__PRE(Node);
 
-/* dynamic array type */
 #define DYN_ARR_TYPE TREESI__PRE(Node)
 #undef DYN_ARR_PREFIX
 #include "da.h"
 
-/* final interface */
 #define PRE(name) TREESI__PRE(name)
 #define TYPE TREESI__TYPE
 #define TreeSi TREESI__NAMESPACE
@@ -69,15 +67,20 @@ static TreeSi PRE(create)(void) { // TODO: memory managment
     return tree;
 }
 
+static void PRE(clear)(TreeSi *tree) {
+    tree->id_counter = 0;
+    PRE(Node_DynArr_clear_preserving_capacity)(&tree->nodes);
+}
+
 /*
-   @param[out] node_index
+   @param[out] out_node_index Optional
    @returns PRE(Node) or NULL
 */
-PRE(Node)* PRE(_find_node)(TreeSi *tree, uint node_id, uint *node_index) {
+PRE(Node)* PRE(_find_node)(TreeSi *tree, uint node_id, uint *out_node_index) {
     for (uint i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
-            if (node_index != NULL) {
-                *node_index = i;
+            if (out_node_index != NULL) {
+                *out_node_index = i;
             }
             return &tree->nodes.items[i];
         }
@@ -85,17 +88,29 @@ PRE(Node)* PRE(_find_node)(TreeSi *tree, uint node_id, uint *node_index) {
     return NULL;
 }
 
+bool PRE(node_exists)(TreeSi *tree, uint node_id) {
+    for (uint i = 0; i < tree->nodes.size; ++i) {
+        if (tree->nodes.items[i].id == node_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /*
+   @param parent_id. If 0 node will be added to root.
+   @param[out] out_node_id Optional
    @returns error
 */
-int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id) {
-
-    bool no_parent = parent_id == 0;
+int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
+{
     PRE(Node) parent_node = { 0 };
     uint parent_index = 0;
+    bool has_parent = parent_id != 0;
 
-    if (!no_parent) {
-        PRE(Node) *tmp = PRE(_find_node)(tree, parent_id, &parent_index); // find parent
+    if (has_parent) {
+        // confirm parent exists
+        PRE(Node) *tmp = PRE(_find_node)(tree, parent_id, &parent_index);
         if (tmp == NULL) { return -1; }
         parent_node = *tmp;
     }
@@ -103,17 +118,19 @@ int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id) {
     PRE(Node) node = {
         .id = tree->id_counter,
         .parent_id = parent_id,
-        .depth = no_parent ? 0 : parent_node.depth +1,
+        .depth = has_parent ? parent_node.depth +1 : 0,
+        .item = item
     };
 
-    if (no_parent) {
-        PRE(Node_DynArr_insert)(&tree->nodes, node);
-    }
-    else {
+    if (has_parent) {
         int error = PRE(Node_DynArr_insert_and_memmove_after)(
                 &tree->nodes, parent_index, node);
         if (error != OK) { return error; }
     }
+    else {
+        PRE(Node_DynArr_insert)(&tree->nodes, node);
+    }
+
     if (out_node_id != NULL) {
         *out_node_id = tree->id_counter;
     }
@@ -126,14 +143,18 @@ int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id) {
 */
 int PRE(destroy_node_and_children)(TreeSi *tree, uint node_id) {
     uint node_index;
-    PRE(Node) *node = PRE(_find_node)(tree, node_id, &node_index); // find parent
+    PRE(Node) *node;
+
+    node = PRE(_find_node)(tree, node_id, &node_index);
     if (node == NULL) { return -1; }
 
     uint parent_depth = node->depth;
+
     node = NULL;
     int error = PRE(Node_DynArr_pop_and_memmove_at)(&tree->nodes, node_index);
     if (error != OK) { return -2; };
 
+    // Not very efficient but good enough.
     while(true) {
         if (node_index >= tree->nodes.size) {
             break;

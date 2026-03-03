@@ -84,16 +84,29 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
 }
 
 
-void WoyInterp_interpret_symbols(WoyInterp *woy_interp, WuiState *wui_state) {
+/*
+  @brief Builds the symbol tree
+  @param symbol_id. If 0 will overwrite the entire tree. (Used for locals)
+                    Otherwise will append symbols as child of symbol_id.
+*/
+int WoyInterp_interpret_symbols(
+   WoyInterp *woy_interp, WuiState *wui_state, uint symbol_id
+) {
    strbuf_t *tmp = &woy_interp->buffer;
    strview_t src = strbuf_view(&tmp);
    strview_t line;
 
    line = strview_split_line(&src, NULL);
    uint success = strnum_u32(line, 0, STRNUM_DEFAULT);
-   if (!success) { return; }
+   if (!success) { return -1; }
 
-   WuiSymbol_DynArr_clear_preserving_capacity(&wui_state->symbols);
+   if (symbol_id != 0 && !SymbolTree_node_exists(&wui_state->symbol_tree, symbol_id)) {
+      return -2;
+   }
+
+   if (symbol_id == 0) {
+      SymbolTree_clear(&wui_state->symbol_tree);
+   }
 
    while (true) {
       line = strview_split_line(&src, NULL);
@@ -122,9 +135,24 @@ void WoyInterp_interpret_symbols(WoyInterp *woy_interp, WuiState *wui_state) {
       tmp = &symbol.address;
       strbuf_assign(&tmp, line);
 
-      WuiSymbol_DynArr_insert(&wui_state->symbols, symbol);
+      SymbolTree_create_node(&wui_state->symbol_tree, symbol_id, NULL, symbol);
 
-      printf("Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
-            symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr, symbol.value.cstr, symbol.address.cstr);
+      //printf("Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
+            //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
+            //symbol.value.cstr, symbol.address.cstr);
    }
+   //printf("PRINTING SYMBOLS BELOW VVV\n");
+   // print tree contents
+   //for (uint i = 0; i < wui_state->symbol_tree.nodes.size; ++i) {
+      //WuiSymbol symbol = wui_state->symbol_tree.nodes.items[i].item;
+      //for (uint k = 0; k < 4 * wui_state->symbol_tree.nodes.items[i].depth;
+      //     ++k) { printf(" "); }
+      //printf("(TREE_ID %d parent %d) Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
+            //wui_state->symbol_tree.nodes.items[i].id,
+            //wui_state->symbol_tree.nodes.items[i].parent_id,
+            //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
+            //symbol.value.cstr, symbol.address.cstr);
+   //}
+
+   return 0;
 }
