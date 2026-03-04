@@ -40,6 +40,12 @@ struct {
     RenderTexture2D aux_texture;
     RenderTexture2D final_texture;
 
+    /* TODO:
+    int curr_focus=
+       FOCUS_AVAILABLE,
+       FOCUS_BUSY_POPUP
+       FOCUS_BUSY_DRAGGING (For resizing panes)
+    */
     enum POPUP curr_popup;
 
     struct {
@@ -110,6 +116,10 @@ void GUI_open_context_menu(strview_t options_str) {
     if (delta.y < 0) { GUI.context_menu.origin.y += delta.y; }
 
     strbuf_assign(&tmp, options_str);
+}
+
+void GUI_close_popup(int option_selected) {
+    GUI.curr_popup = POPUP_NONE;
 }
 
 void GUI_init_global_context(void) {
@@ -196,6 +206,7 @@ void GUI_draw_popups(void) {
         option_rect.height = (float)line_height;
         bool hover = false;
         bool must_break = false;
+        int hover_option_id = -1;
 
         DrawRectangleRec(rect.rect, DARKGRAY);
 
@@ -210,7 +221,10 @@ void GUI_draw_popups(void) {
 
             //printf("-> %"PRIstr"\n", PRIstrarg(line));
 
-            if (hover) DrawRectangleRec(option_rect.rect, BLUE);
+            if (hover) {
+                DrawRectangleRec(option_rect.rect, BLUE);
+                hover_option_id = i;
+            }
 
             DrawTextEx_strview(GUI.font, line,
                 (Vector2) { rect.x + 2, rect.y + (float)i * (float)line_height },
@@ -218,6 +232,11 @@ void GUI_draw_popups(void) {
         }
 
         DrawRectangleLinesEx(rect.rect, 1, BLACK);
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            printf("Pressed option %d\n", hover_option_id);
+            GUI_close_popup(hover_option_id);
+        }
     }
 }
 
