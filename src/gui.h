@@ -356,51 +356,25 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         if (textedit->cursor > (int)textedit->linebreaks.items[i]) {
             cursor_line = (int)i;
             chars_until_cursor_line = (int)textedit->linebreaks.items[i];
-            //--chars_until_cursor_line; // -1 to remove \n
-            ++chars_until_cursor_line; // -1 to remove \n
+            ++chars_until_cursor_line; // ???
         } else {
             break;
         }
     }
     ++cursor_line;
 
-    // get cursor line character count
-
-    //int line_char_count = 0;
-    //if (textedit->linebreaks.size == 0) {
-        //line_char_count = textedit->buffer->size;
-    //}
-    //else if (cursor_line == -1) {
-        //strview_t tmp_view = strview_of_buf(textedit->buffer);
-        //strview_t tmp_line = strview_split_line(&tmp_view, NULL);
-        //line_char_count = tmp_line.size -1; // -1 to remove \n
-    //}
-    //printf("cursor %d : chars until %d\n", textedit->cursor, chars_until_cursor_line);
-
     // draw cursor
+
+    int screen_cursor = textedit->cursor - chars_until_cursor_line;
 
     DrawRectangleRec((Rectangle) {
         view_rect.x + number_padding +
-        (float)(textedit->cursor - chars_until_cursor_line)
-                                        * (GUI.font_width + GUI.font_spacing),
+        (float)(screen_cursor) * (GUI.font_width + GUI.font_spacing),
         view_rect.y +
         (float)cursor_line * (GUI.font_size + line_spacing),
         2,
         GUI.font_size
     }, RED);
-
-    /*
-    strview_t all_lines = strview_of_buf(textedit->buffer);
-    strview_t line;
-    bool must_break = false;
-
-    for (int i = 0;; ++i) {
-        if (all_lines.size == 0 || must_break) { break; }
-        line = strview_split_line(&all_lines, NULL);
-        if (!strview_is_valid(line)) { line = all_lines; must_break = true; }
-        if (!strview_is_valid(line)) { continue; }
-    }
-    */
 
     DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
     EndTextureMode();
@@ -411,11 +385,43 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         --textedit->cursor;
         printf("cursor %d\n", textedit->cursor);
     }
-    else if (IsKeyPressed(KEY_RIGHT)
-            && (textedit->cursor < textedit->buffer->size)
+    if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
     ) {
         ++textedit->cursor;
         printf("cursor %d\n", textedit->cursor);
+    }
+    if (IsKeyPressed(KEY_DOWN) && (cursor_line < (int)textedit->linebreaks.size)
+    ) {
+        int break1 = -1;
+        if (cursor_line -1 >= 0) { 
+            break1 = (int)textedit->linebreaks.items[cursor_line-1];
+        }
+        int break2 = (int)textedit->linebreaks.items[cursor_line];
+        int break3;
+        if (cursor_line +1 >= (int)textedit->linebreaks.size) {
+            break3 = textedit->buffer->size;
+        } else {
+            break3 = (int)textedit->linebreaks.items[cursor_line+1];
+        }
+
+        int new_cursor = int_min(
+            textedit->cursor + break2 - break1,
+            break3
+        );
+        textedit->cursor = new_cursor;
+    }
+    if (IsKeyPressed(KEY_UP) && (cursor_line -1 >= 0)) {
+        int break1 = -1;
+        if (cursor_line -2 >= 0) { 
+            break1 = (int)textedit->linebreaks.items[cursor_line-2];
+        }
+        int break2 = (int)textedit->linebreaks.items[cursor_line-1];
+
+        int new_cursor = int_min(
+                textedit->cursor - (break2 - break1),
+                break2
+            );
+        textedit->cursor = new_cursor;
     }
 }
 
@@ -436,7 +442,7 @@ void GUI_draw_all(WuiState *state) {
 
     // TextEdit
 
-    view_rect = (Rect2) {{ 200, 250, 200, 120 }};
+    view_rect = (Rect2) {{ 150, 150, 240, 300 }};
     GUI_TextEdit_draw(&GUI.textedit, view_rect);
     BeginTextureMode(GUI.final_texture);
         DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);

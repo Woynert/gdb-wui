@@ -170,6 +170,8 @@ int main (void) {
 
     GUI_TextEdit_enable(&GUI.textedit, cstr(
         "#include \"stdio.h\"\n"
+        "#include \"stdlibbbb.h\"\n"
+        "#include \"math.h\"\n"
         "\n"
         "int main(void)\n"
         "{\n"
@@ -178,7 +180,7 @@ int main (void) {
         "\n"
         "\n"
         "\n"
-        "\n"
+        "EOF below\n"
         "EOF"
     ));
 
