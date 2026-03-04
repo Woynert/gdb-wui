@@ -38,10 +38,6 @@ enum POPUP {
 
 
 
-/*
- * ASCII only text editor (32–126)
- */
-
 #ifndef DYN_ARR_TYPE_UINT
 #define DYN_ARR_TYPE_UINT
 #define DYN_ARR_TYPE uint
@@ -279,6 +275,8 @@ void GUI_draw_popups(void) {
     }
 }
 
+// FIXME: This startindex doesn't work because we are not preserving previous
+//        lines.
 void GUI_TextEdit_update_linebreaks(TextEdit *textedit, int startindex) {
     strview_t buffer = strview_of_buf(textedit->buffer);
     if (startindex >= buffer.size) { startindex = 0; };
@@ -307,13 +305,22 @@ void GUI_TextEdit_disable(TextEdit *textedit) {
 
 // void GUI_TextEdit_get_buffer(TextEdit *textedit) { }
 
+
+bool GUI_TextEdit_is_unicode_in_range(int unicode) {
+    return (unicode >= 32 && unicode <= 126)
+        || (unicode >= 160 && unicode <= 255);
+
+    // https://en.wikipedia.org/wiki/List_of_Unicode_characters
+}
+
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
 
     float line_spacing = 2;
     float line_height = GUI.font_size + line_spacing;
-    float number_padding = GUI.font_width + 2;
+    float number_padding = fmaxf(3, (GUI.font_width + GUI.font_spacing)
+        * (ceilf(((float)textedit->linebreaks.size +1) / 10.f) +1));
 
     DrawTextEx_strview(
         GUI.font,
@@ -331,7 +338,11 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
 
     for (uint i = 0; i <= (uint)ceilf(view_rect.height/line_height); ++i) {
-        strbuf_printf(&aux_str, "%d", i);
+        if (i <= textedit->linebreaks.size) {
+            strbuf_printf(&aux_str, "%d", i);
+        } else {
+            strbuf_assign(&aux_str, cstr("~"));
+        }
 
         DrawTextEx_strview(
             GUI.font,
@@ -423,6 +434,52 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             );
         textedit->cursor = new_cursor;
     }
+    if (IsKeyPressed(KEY_BACKSPACE) && (textedit->cursor > 0)) {
+        --textedit->cursor;
+
+        strbuf_pop_at_index(&textedit->buffer, textedit->cursor, 1);
+        GUI_TextEdit_update_linebreaks(textedit, 0);
+
+        return;
+    }
+    // write character
+    char new_char[2] = { '\0', '\0' };
+    int codepoint;
+    while ((codepoint = GetCharPressed())) {
+        if (GUI_TextEdit_is_unicode_in_range(codepoint))
+        {
+            new_char[0] = (char)codepoint;
+            strbuf_insert_at_index_cstr(
+                    &textedit->buffer, textedit->cursor, new_char);
+            ++textedit->cursor;
+            GUI_TextEdit_update_linebreaks(textedit, 0);
+        }
+        else {
+            printf("codepoint %d\n", codepoint);
+        }
+    }
+    if (IsKeyPressed(KEY_ENTER)) {
+        new_char[0] = (char)'\n';
+        strbuf_insert_at_index_cstr(
+                &textedit->buffer, textedit->cursor, new_char);
+        ++textedit->cursor;
+        GUI_TextEdit_update_linebreaks(textedit, 0);
+        return;
+    }
+    // paste
+    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
+        if (IsKeyPressed(KEY_V)) {
+            const char *clipboard_cstr = GetClipboardText();
+            strview_t clipboard = cstr(clipboard_cstr);
+
+            strbuf_insert_at_index(
+                &textedit->buffer, textedit->cursor, clipboard);
+            GUI_TextEdit_update_linebreaks(textedit, 0);
+            textedit->cursor += clipboard.size;
+            return;
+        }
+    }
+
 }
 
 void GUI_draw_all(WuiState *state) {
