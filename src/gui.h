@@ -50,7 +50,10 @@ enum POPUP {
 typedef struct TextEdit {
     bool enabled;
     int cursor;
-    bool wrap;
+    //bool wrap;
+    bool is_selecting;
+    int selection_origin;
+    int selection_line;
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
     uint_DynArr linebreaks;
 } TextEdit;
@@ -322,6 +325,110 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     float number_padding = fmaxf(3, (GUI.font_width + GUI.font_spacing)
         * (ceilf(((float)textedit->linebreaks.size +1) / 10.f) +1));
 
+    /*
+     * Some of these variables only need to be updated on cursor change, however
+     * for now it seems the computation required is negligible.
+     */
+    // get cursor line
+
+    int cursor_line = -1;
+    int chars_until_cursor_line = 0;
+    int chars_until_selection = 0;
+    for (size_t i = 0; i < textedit->linebreaks.size; ++i) {
+        bool must_break = true;
+        if (textedit->cursor > (int)textedit->linebreaks.items[i]) {
+            cursor_line = (int)i;
+            chars_until_cursor_line = (int)textedit->linebreaks.items[i];
+            ++chars_until_cursor_line; // ???
+            must_break = false;
+        }
+        if (textedit->is_selecting &&
+            textedit->selection_origin > (int)textedit->linebreaks.items[i]
+        ) {
+            chars_until_selection = (int)textedit->linebreaks.items[i];
+            ++chars_until_selection; // ???
+            must_break = false;
+        }
+        if (must_break) {
+            break;
+        }
+    }
+    ++cursor_line;
+
+    // draw selection area
+
+    if (textedit->is_selecting) {
+        /*
+         * Three cases:
+         * 1. Selection starts and ends on the same line (1 rect).
+         * 2. Selection starts and ends on adjacent lines (2 rects).
+         * 3. Selection start and end are on different non adjacent lines
+         *    (n rects).
+         */
+        int select_start, select_end, line_start, line_end,
+            chars_til_start, chars_til_end;
+        if (textedit->cursor > textedit->selection_origin) {
+            line_start      = textedit->selection_line;
+            line_end        = cursor_line;
+            chars_til_start = chars_until_selection;
+            chars_til_end   = chars_until_cursor_line;
+            select_start    = textedit->selection_origin - chars_til_start;
+            select_end      = textedit->cursor - chars_til_end;
+        } else {
+            line_start      = cursor_line;
+            line_end        = textedit->selection_line;
+            chars_til_start = chars_until_cursor_line;
+            chars_til_end   = chars_until_selection;
+            select_start    = textedit->cursor - chars_til_start;
+            select_end      = textedit->selection_origin - chars_til_end;
+        }
+        float start_x = view_rect.x + number_padding +
+                (float)(select_start) * (GUI.font_width + GUI.font_spacing);
+        float end_x = view_rect.x + number_padding +
+                (float)(select_end) * (GUI.font_width + GUI.font_spacing);
+        Rectangle rect;
+
+        if (line_start == line_end) {
+            rect = (Rectangle) {
+                start_x,
+                view_rect.y + (float)line_start * (GUI.font_size + line_spacing),
+                end_x - start_x, GUI.font_size
+            };
+            DrawRectangleRec(rect, BLUE);
+        }
+        else {
+            rect = (Rectangle) {
+                start_x,
+                view_rect.y + (float)line_start * (GUI.font_size + line_spacing),
+                view_rect.x + view_rect.width - start_x, GUI.font_size
+            };
+            DrawRectangleRec(rect, PURPLE);
+            rect = (Rectangle) {
+                view_rect.x + number_padding,
+                view_rect.y + (float)line_end * (GUI.font_size + line_spacing),
+                end_x - (view_rect.x + number_padding), GUI.font_size
+            };
+            DrawRectangleRec(rect, ORANGE);
+            for (int i = line_start+1; i < line_end; ++i) {
+                rect = (Rectangle) {
+                    view_rect.x + number_padding,
+                    view_rect.y + (float)i * (GUI.font_size + line_spacing),
+                    view_rect.x + view_rect.width, GUI.font_size
+                };
+                DrawRectangleRec(rect, MAROON);
+            }
+        }
+        DrawRectangleRec((Rectangle) {
+            view_rect.x + number_padding +
+                (float)(textedit->selection_origin - chars_until_selection)
+                    * (GUI.font_width + GUI.font_spacing),
+            view_rect.y +
+                (float)textedit->selection_line * (GUI.font_size + line_spacing),
+            2, GUI.font_size }, GREEN);
+    }
+
+    // draw buffer
+
     DrawTextEx_strview(
         GUI.font,
         strview_of_buf(textedit->buffer),
@@ -355,25 +462,6 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         );
     }
 
-    /*
-     * Some of these variables only need to be updated on cursor change, however
-     * for now it seems the computation required is negligible.
-     */
-    // get cursor line
-
-    int cursor_line = -1;
-    int chars_until_cursor_line = 0;
-    for (size_t i = 0; i < textedit->linebreaks.size; ++i) {
-        if (textedit->cursor > (int)textedit->linebreaks.items[i]) {
-            cursor_line = (int)i;
-            chars_until_cursor_line = (int)textedit->linebreaks.items[i];
-            ++chars_until_cursor_line; // ???
-        } else {
-            break;
-        }
-    }
-    ++cursor_line;
-
     // draw cursor
 
     int screen_cursor = textedit->cursor - chars_until_cursor_line;
@@ -392,12 +480,31 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
     // controls
 
+
+    bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
     if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
+        if (shift) {
+            if (!textedit->is_selecting) {
+                textedit->selection_origin = textedit->cursor;
+                textedit->selection_line = cursor_line;
+            }
+            textedit->is_selecting = true;
+        }
+
         --textedit->cursor;
         printf("cursor %d\n", textedit->cursor);
     }
     if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
     ) {
+        if (shift) {
+            if (!textedit->is_selecting) {
+                textedit->selection_origin = textedit->cursor;
+                textedit->selection_line = cursor_line;
+            }
+            textedit->is_selecting = true;
+        }
+
         ++textedit->cursor;
         printf("cursor %d\n", textedit->cursor);
     }
@@ -479,7 +586,9 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             return;
         }
     }
-
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        textedit->is_selecting = false;
+    }
 }
 
 void GUI_draw_all(WuiState *state) {
