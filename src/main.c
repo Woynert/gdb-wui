@@ -166,15 +166,12 @@ int main (void) {
     const int screenHeight = 400;
     InitWindow(screenWidth, screenHeight, "WUI");
     SetTargetFPS(60);
-
-    GuiCtx gui = { 0 };
-    GuiCtx_init(&gui);
-
+    GUI_init_global_context();
 
     while (!WindowShouldClose()) // Detect window close button or ESC key
     {
 
-        GUI_draw_all(&gui, &wui_state);
+        GUI_draw_all(&wui_state);
 
     /*while(true) {*/
         /*sleep_ms(50);*/
