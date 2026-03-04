@@ -168,6 +168,20 @@ int main (void) {
     SetTargetFPS(60);
     GUI_init_global_context();
 
+    GUI_TextEdit_enable(&GUI.textedit, cstr(
+        "#include \"stdio.h\"\n"
+        "\n"
+        "int main(void)\n"
+        "{\n"
+        "    printf(\"Hello world\\n\");\n"
+        "}\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "EOF"
+    ));
+
     while (!WindowShouldClose()) // Detect window close button or ESC key
     {
 

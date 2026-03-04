@@ -35,7 +35,7 @@ void DrawTexture_flipped(Texture2D texture, int posX, int posY, Color tint)
 // EXTRACTED FROM rtext.c
 // Draw text using Font
 // NOTE: chars spacing is NOT proportional to fontSize
-void DrawTextEx_strview(Font font, strview_t string, Vector2 position, float fontSize, float spacing, Color tint)
+void DrawTextEx_strview(Font font, strview_t string, Vector2 position, float fontSize, float spacing, float textLineSpacing, Color tint)
 {
     if (font.texture.id == 0) font = GetFontDefault();  // Security check in case of not valid font
 
@@ -57,8 +57,8 @@ void DrawTextEx_strview(Font font, strview_t string, Vector2 position, float fon
         {
             // NOTE: Line spacing is a global variable, use SetTextLineSpacing() to setup
             // It is not accesible outside rtext.c, but it defaults to 2
-            //textOffsetY += (fontSize + textLineSpacing);
-            textOffsetY += (fontSize + 2);
+            textOffsetY += (fontSize + textLineSpacing);
+            //textOffsetY += (fontSize + 2);
             textOffsetX = 0.0f;
         }
         else

@@ -1,17 +1,22 @@
 #ifndef GUI
 
 #include "stdio.h"
+#include "math.h"
 
 #include "raygui.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "raylib_extra.h"
 #include "strbuf.h"
+#include "strnum.h"
 #include "strview.h"
 #include "strbuf_extra.h"
 #include "portable_utils.h"
 
 #include "wui_state.h"
+
+
+
 
 /* Notes:
  * Since strbuf empties the string if the space is insufficient (for static
@@ -30,6 +35,35 @@ enum POPUP {
 
 #define GUI_OPTIONS_STRING_LEN 1024
 #define GUI_POPUP_PAD 3
+
+
+
+/*
+ * ASCII only text editor (32–126)
+ */
+
+#ifndef DYN_ARR_TYPE_UINT
+#define DYN_ARR_TYPE_UINT
+#define DYN_ARR_TYPE uint
+#undef  DYN_ARR_PREFIX
+#include "containers/da.h"
+#undef  DYN_ARR_TYPE
+#endif
+
+
+typedef struct TextEdit {
+    bool enabled;
+    int cursor;
+    bool wrap;
+    strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
+    uint_DynArr linebreaks;
+} TextEdit;
+
+
+void GUI_TextEdit_init(TextEdit *textedit) {
+    textedit->buffer = strbuf_create(0, NULL);
+    textedit->linebreaks = uint_DynArr_create();
+}
 
 struct {
     Font font;
@@ -64,7 +98,34 @@ struct {
             strbuf_t options;
         };
     } context_menu;
+
+    TextEdit textedit;
 } GUI;
+
+void GUI_init_global_context(void) {
+    STRBUF_STATIC_INIT2(GUI_OPTIONS_STRING_LEN, GUI.context_menu._options);
+
+    // TODO: what about multiscreen setups?
+    GUI.aux_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    GUI.final_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+
+    GUI_TextEdit_init(&GUI.textedit);
+
+    //LoadFont
+    GUI.font_spacing = 1;
+    GUI.font_size = 15;
+    GUI.font = LoadFontEx("./IosevkaFixed-Regular.ttf", (int)GUI.font_size, 0, 250);
+    //GUI.font = LoadFontEx("./assets/RobotoMono-Regular.ttf", (int)GUI.font_size, 0, 250);
+    //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
+
+    int w1 = (int)MeasureTextEx(GUI.font, "W",
+            (float)GUI.font_size, GUI.font_spacing).x;
+    int w2 = (int)MeasureTextEx(GUI.font, "@",
+            (float)GUI.font_size, GUI.font_spacing).x;
+    int w3 = (int)MeasureTextEx(GUI.font, "_",
+            (float)GUI.font_size, GUI.font_spacing).x;
+    GUI.font_width = (float)int_max(w1, int_max(w2, w3));
+}
 
 void GUI_open_context_menu(strview_t options_str) {
     if (options_str.size <= 0) return;
@@ -122,28 +183,6 @@ void GUI_close_popup(int option_selected) {
     GUI.curr_popup = POPUP_NONE;
 }
 
-void GUI_init_global_context(void) {
-    STRBUF_STATIC_INIT2(GUI_OPTIONS_STRING_LEN, GUI.context_menu._options);
-
-    // TODO: what about multiscreen setups?
-    GUI.aux_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    GUI.final_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-
-    //LoadFont
-    GUI.font_spacing = 1;
-    GUI.font_size = 15;
-    GUI.font = LoadFontEx("./IosevkaFixed-Regular.ttf", (int)GUI.font_size, 0, 250);
-    //GUI.font = LoadFontEx("./assets/RobotoMono-Regular.ttf", (int)GUI.font_size, 0, 250);
-    //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
-
-    int w1 = (int)MeasureTextEx(GUI.font, "W",
-            (float)GUI.font_size, GUI.font_spacing).x;
-    int w2 = (int)MeasureTextEx(GUI.font, "@",
-            (float)GUI.font_size, GUI.font_spacing).x;
-    int w3 = (int)MeasureTextEx(GUI.font, "_",
-            (float)GUI.font_size, GUI.font_spacing).x;
-    GUI.font_width = (float)int_max(w1, int_max(w2, w3));
-}
 
 //typedef struct GuiBreakpointView {
     //int i;
@@ -228,7 +267,7 @@ void GUI_draw_popups(void) {
 
             DrawTextEx_strview(GUI.font, line,
                 (Vector2) { rect.x + 2, rect.y + (float)i * (float)line_height },
-                GUI.font_size, GUI.font_spacing, BLACK);
+                GUI.font_size, GUI.font_spacing, 2, BLACK);
         }
 
         DrawRectangleLinesEx(rect.rect, 1, BLACK);
@@ -240,15 +279,165 @@ void GUI_draw_popups(void) {
     }
 }
 
+void GUI_TextEdit_update_linebreaks(TextEdit *textedit, int startindex) {
+    strview_t buffer = strview_of_buf(textedit->buffer);
+    if (startindex >= buffer.size) { startindex = 0; };
+    uint_DynArr_clear_preserving_capacity(&textedit->linebreaks);
+
+    for (int i = startindex; i < textedit->buffer->size; ++i) {
+        if (buffer.data[i] != '\n') { continue; }
+        uint_DynArr_insert(&textedit->linebreaks, (uint)i);
+    }
+    //uint_DynArr_insert(&textedit->linebreaks, (uint)textedit->buffer->size);
+
+    // Note: For more performance implement "update_linebreaks_around_cursor".
+}
+
+
+void GUI_TextEdit_enable(TextEdit *textedit, strview_t initial_buffer) {
+    textedit->enabled = true;
+    textedit->cursor = 0;
+    strbuf_assign(&textedit->buffer, initial_buffer);
+    GUI_TextEdit_update_linebreaks(textedit, 0);
+}
+
+void GUI_TextEdit_disable(TextEdit *textedit) {
+    textedit->enabled = false;
+}
+
+// void GUI_TextEdit_get_buffer(TextEdit *textedit) { }
+
+void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
+    BeginTextureMode(GUI.aux_texture);
+    DrawRectangleRec(view_rect.rect, GRAY);
+
+    float line_spacing = 2;
+    float line_height = GUI.font_size + line_spacing;
+    float number_padding = GUI.font_width + 2;
+
+    DrawTextEx_strview(
+        GUI.font,
+        strview_of_buf(textedit->buffer),
+        (Vector2) { view_rect.x + number_padding, view_rect.y },
+        GUI.font_size,
+        GUI.font_spacing,
+        line_spacing,
+        BLACK
+    );
+
+    // draw numbers
+
+    static strbuf_space_t(16) _aux_str = STRBUF_STATIC_INIT(16);
+    strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
+
+    for (uint i = 0; i <= (uint)ceilf(view_rect.height/line_height); ++i) {
+        strbuf_printf(&aux_str, "%d", i);
+
+        DrawTextEx_strview(
+            GUI.font,
+            strview_of_buf(aux_str),
+            (Vector2) {view_rect.x, view_rect.y + line_height * (float)i},
+            GUI.font_size,
+            GUI.font_spacing,
+            0,
+            BLACK
+        );
+    }
+
+    /*
+     * Some of these variables only need to be updated on cursor change, however
+     * for now it seems the computation required is negligible.
+     */
+    // get cursor line
+
+    int cursor_line = -1;
+    int chars_until_cursor_line = 0;
+    for (size_t i = 0; i < textedit->linebreaks.size; ++i) {
+        if (textedit->cursor > (int)textedit->linebreaks.items[i]) {
+            cursor_line = (int)i;
+            chars_until_cursor_line = (int)textedit->linebreaks.items[i];
+            //--chars_until_cursor_line; // -1 to remove \n
+            ++chars_until_cursor_line; // -1 to remove \n
+        } else {
+            break;
+        }
+    }
+    ++cursor_line;
+
+    // get cursor line character count
+
+    //int line_char_count = 0;
+    //if (textedit->linebreaks.size == 0) {
+        //line_char_count = textedit->buffer->size;
+    //}
+    //else if (cursor_line == -1) {
+        //strview_t tmp_view = strview_of_buf(textedit->buffer);
+        //strview_t tmp_line = strview_split_line(&tmp_view, NULL);
+        //line_char_count = tmp_line.size -1; // -1 to remove \n
+    //}
+    //printf("cursor %d : chars until %d\n", textedit->cursor, chars_until_cursor_line);
+
+    // draw cursor
+
+    DrawRectangleRec((Rectangle) {
+        view_rect.x + number_padding +
+        (float)(textedit->cursor - chars_until_cursor_line)
+                                        * (GUI.font_width + GUI.font_spacing),
+        view_rect.y +
+        (float)cursor_line * (GUI.font_size + line_spacing),
+        2,
+        GUI.font_size
+    }, RED);
+
+    /*
+    strview_t all_lines = strview_of_buf(textedit->buffer);
+    strview_t line;
+    bool must_break = false;
+
+    for (int i = 0;; ++i) {
+        if (all_lines.size == 0 || must_break) { break; }
+        line = strview_split_line(&all_lines, NULL);
+        if (!strview_is_valid(line)) { line = all_lines; must_break = true; }
+        if (!strview_is_valid(line)) { continue; }
+    }
+    */
+
+    DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
+    EndTextureMode();
+
+    // controls
+
+    if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
+        --textedit->cursor;
+        printf("cursor %d\n", textedit->cursor);
+    }
+    else if (IsKeyPressed(KEY_RIGHT)
+            && (textedit->cursor < textedit->buffer->size)
+    ) {
+        ++textedit->cursor;
+        printf("cursor %d\n", textedit->cursor);
+    }
+}
+
 void GUI_draw_all(WuiState *state) {
     BeginTextureMode(GUI.final_texture);
         ClearBackground(BLANK);
     EndTextureMode();
 
     Rect2 view_rect;
-    view_rect = (Rect2) {{ 50, 250, 120, 120 }};
-    GuiBreakpointView_draw(state, view_rect);
 
+    // Breakpoint
+
+    view_rect = (Rect2) {{ 20, 250, 120, 120 }};
+    GuiBreakpointView_draw(state, view_rect);
+    BeginTextureMode(GUI.final_texture);
+        DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
+    EndTextureMode();
+
+    // TextEdit
+
+    view_rect = (Rect2) {{ 200, 250, 200, 120 }};
+    GUI_TextEdit_draw(&GUI.textedit, view_rect);
     BeginTextureMode(GUI.final_texture);
         DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
     EndTextureMode();
