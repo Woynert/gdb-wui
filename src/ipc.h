@@ -223,7 +223,7 @@ void IPC_wait_for_prompt(
 
     int error;
     while(true) {
-        sleep_ms(50);
+        sleep_ms(5);
         error = _IPCReader_read_line(
                 reader, ipc_ctx->child_to_master_pipe[0], aux_str);
         if (error == 0) {

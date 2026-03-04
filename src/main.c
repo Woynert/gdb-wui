@@ -87,69 +87,69 @@ int main (void) {
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
     // find a symbol of type struct
-    for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {
-        WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;
-        if (symbol->basic_type == 3) {
-            uint node_id = wui_state.symbol_tree.nodes.items[i].id;
+    /*for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {*/
+        /*WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;*/
+        /*if (symbol->basic_type == 3) {*/
+            /*uint node_id = wui_state.symbol_tree.nodes.items[i].id;*/
 
-            printf("Found struct [%s]\n", symbol->symbol_name.cstr);
+            /*printf("Found struct [%s]\n", symbol->symbol_name.cstr);*/
 
-            {
-                strbuf_t *tmp = &symbol->symbol_name;
-                strbuf_cat(
-                    &aux_str,
-                    cstr("py woy_query_symbol(\""),
-                    strbuf_view(&tmp),
-                    cstr("\")\n")
-                );
-            }
+            /*{*/
+                /*strbuf_t *tmp = &symbol->symbol_name;*/
+                /*strbuf_cat(*/
+                    /*&aux_str,*/
+                    /*cstr("py woy_query_symbol(\""),*/
+                    /*strbuf_view(&tmp),*/
+                    /*cstr("\")\n")*/
+                /*);*/
+            /*}*/
 
-            printf("QUERY string [%s]\n", aux_str->cstr);
+            /*printf("QUERY string [%s]\n", aux_str->cstr);*/
 
-/*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
-error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
-ASSERT(error == 0);
-IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);
-// After calling a 'WOY API' command, clear the GDB previous command
-error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
-ASSERT(error == 0);
-IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+/*[>error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));<]*/
+/*error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));*/
+/*ASSERT(error == 0);*/
+/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);*/
+/*// After calling a 'WOY API' command, clear the GDB previous command*/
+/*error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));*/
+/*ASSERT(error == 0);*/
+/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
 
-            break;
-        }
-    }
+            /*break;*/
+        /*}*/
+    /*}*/
 
-    for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {
-        WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;
-        if (wui_state.symbol_tree.nodes.items[i].id == 7) {
-            uint node_id = wui_state.symbol_tree.nodes.items[i].id;
+    /*for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {*/
+        /*WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;*/
+        /*if (wui_state.symbol_tree.nodes.items[i].id == 7) {*/
+            /*uint node_id = wui_state.symbol_tree.nodes.items[i].id;*/
 
-            printf("Found struct [%s]\n", symbol->symbol_name.cstr);
+            /*printf("Found struct [%s]\n", symbol->symbol_name.cstr);*/
 
-            {
-                strbuf_t *tmp = &symbol->symbol_name;
-                strbuf_cat(
-                    &aux_str,
-                    cstr("py woy_query_symbol(\""),
-                    strbuf_view(&tmp),
-                    cstr("\")\n")
-                );
-            }
+            /*{*/
+                /*strbuf_t *tmp = &symbol->symbol_name;*/
+                /*strbuf_cat(*/
+                    /*&aux_str,*/
+                    /*cstr("py woy_query_symbol(\""),*/
+                    /*strbuf_view(&tmp),*/
+                    /*cstr("\")\n")*/
+                /*);*/
+            /*}*/
 
-            printf("QUERY string [%s]\n", aux_str->cstr);
+            /*printf("QUERY string [%s]\n", aux_str->cstr);*/
 
-/*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
-error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
-ASSERT(error == 0);
-IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);
-// After calling a 'WOY API' command, clear the GDB previous command
-error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
-ASSERT(error == 0);
-IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+/*[>error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));<]*/
+/*error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));*/
+/*ASSERT(error == 0);*/
+/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);*/
+/*// After calling a 'WOY API' command, clear the GDB previous command*/
+/*error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));*/
+/*ASSERT(error == 0);*/
+/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
 
-            break;
-        }
-    }
+            /*break;*/
+        /*}*/
+    /*}*/
 
 
     /*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
@@ -166,14 +166,15 @@ IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0
     const int screenHeight = 400;
     InitWindow(screenWidth, screenHeight, "WUI");
     SetTargetFPS(60);
+
+    GuiCtx gui = { 0 };
+    GuiCtx_init(&gui);
+
+
     while (!WindowShouldClose()) // Detect window close button or ESC key
     {
 
-        BeginDrawing();
-        ClearBackground(DARKGRAY);
-        DrawFPS(0,0);
-        GUI_draw();
-        EndDrawing();
+        GUI_draw_all(&gui, &wui_state);
 
     /*while(true) {*/
         /*sleep_ms(50);*/

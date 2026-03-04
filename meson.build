@@ -28,6 +28,8 @@ my_extra_args = [
   '-Wno-unused-function'
 ]
 
+add_global_arguments('-DSTRBUF_PROVIDE_PRINTF', language: 'c')
+
 # general deps
 
 cc = meson.get_compiler('c')
@@ -67,15 +69,15 @@ gdbwui_exe = executable(
   ,c_args : my_extra_args
 )
 
-scroll_exe = executable(
-  'scroll'
-  ,'src/scroll.c'
-  ,dependencies : [
-    mickstr_dep,
-    math_dep
-  ]
-  ,c_args : my_extra_args
-)
+#scroll_exe = executable(
+  #'scroll'
+  #,'src/scroll.c'
+  #,dependencies : [
+    #mickstr_dep,
+    #math_dep
+  #]
+  #,c_args : my_extra_args
+#)
 
 file_list_exe = executable(
   'file_list'
