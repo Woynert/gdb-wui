@@ -356,6 +356,21 @@ void GUI_TextEdit__cursor_up(TextEdit *textedit, int cursor_line) {
     textedit->cursor = new_cursor;
 }
 
+void GUI_TextEdit__delete_selection(TextEdit *textedit) {
+    int start, end;
+    if (textedit->cursor > textedit->selection_origin) {
+        start = textedit->selection_origin;
+        end = textedit->cursor;
+    } else {
+        start = textedit->cursor;
+        end = textedit->selection_origin;
+    }
+    strbuf_pop_at_index(&textedit->buffer, start, end-start);
+    textedit->is_selecting = false;
+    textedit->cursor = start;
+    GUI_TextEdit_update_linebreaks(textedit, 0);
+}
+
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
@@ -595,13 +610,14 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         GUI_TextEdit__cursor_up(textedit, cursor_line);
     }
 
-    if (IsKeyPressed(KEY_BACKSPACE) && (textedit->cursor > 0)) {
-        --textedit->cursor;
-
-        strbuf_pop_at_index(&textedit->buffer, textedit->cursor, 1);
-        GUI_TextEdit_update_linebreaks(textedit, 0);
-
-        return;
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+        if (textedit->is_selecting) {
+            GUI_TextEdit__delete_selection(textedit);
+        } else if (textedit->cursor > 0) {
+            --textedit->cursor;
+            strbuf_pop_at_index(&textedit->buffer, textedit->cursor, 1);
+            GUI_TextEdit_update_linebreaks(textedit, 0);
+        }
     }
 
     char new_char[2] = { '\0', '\0' };
@@ -609,6 +625,10 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     while ((codepoint = GetCharPressed())) // write text
     { 
         if (!GUI_TextEdit_is_unicode_in_range(codepoint)) continue;
+
+        if (textedit->is_selecting) {
+            GUI_TextEdit__delete_selection(textedit);
+        }
 
         new_char[0] = (char)codepoint;
         strbuf_insert_at_index_cstr(
@@ -618,6 +638,10 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     }
 
     if (IsKeyPressed(KEY_ENTER)) {
+        if (textedit->is_selecting) {
+            GUI_TextEdit__delete_selection(textedit);
+        }
+
         new_char[0] = (char)'\n';
         strbuf_insert_at_index_cstr(
                 &textedit->buffer, textedit->cursor, new_char);
@@ -631,12 +655,17 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         if (IsKeyPressed(KEY_V)) {
             const char *clipboard_cstr = GetClipboardText();
             strview_t clipboard = cstr(clipboard_cstr);
+            if (clipboard.size > 0) {
+                if (textedit->is_selecting) {
+                    GUI_TextEdit__delete_selection(textedit);
+                }
 
-            strbuf_insert_at_index(
-                &textedit->buffer, textedit->cursor, clipboard);
-            GUI_TextEdit_update_linebreaks(textedit, 0);
-            textedit->cursor += clipboard.size;
-            return;
+                strbuf_insert_at_index(
+                    &textedit->buffer, textedit->cursor, clipboard);
+
+                GUI_TextEdit_update_linebreaks(textedit, 0);
+                textedit->cursor += clipboard.size;
+            }
         }
     }
 
