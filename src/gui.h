@@ -62,7 +62,7 @@ typedef struct TextEdit_Change {
 
 typedef struct TextEdit_Log {
     TextEditRing ring;
-    int cursor;
+    uint cursor;
 } TextEdit_Log;
 
 typedef struct TextEdit {
@@ -397,6 +397,13 @@ void GUI_TextEdit__update_selection(
     }
 }
 
+void GUI_TextEdit__discard_undo_log(TextEdit *textedit) {
+    for (uint i = 0; i < textedit->editlog.cursor; ++i) {
+        TextEditRing_pop_head(&textedit->editlog.ring);
+    }
+    textedit->editlog.cursor = 0;
+}
+
 void GUI_TextEdit__move_by_world(TextEdit *textedit, int dir) {
     strview_t delimiters = cstr("\n(){};.,\"\'#");
     int new_cursor;
@@ -442,8 +449,11 @@ void GUI_TextEdit__move_by_world(TextEdit *textedit, int dir) {
     textedit->cursor = new_cursor;
 }
 
-void GUI_TextEdit__apply_change(TextEdit *textedit, const TextEdit_Change *change) {
-    if (change->is_insert) {
+void GUI_TextEdit__apply_change(
+    TextEdit *textedit, const TextEdit_Change *change, bool undo
+) {
+    // (undo ? !change->is_insert : change->is_insert) -> XOR.
+    if (undo ^ change->is_insert) {
         strbuf_insert_at_index(
             &textedit->buffer, change->start, strview_of_buf(change->buffer));
         textedit->cursor += change->buffer->size;
@@ -455,20 +465,10 @@ void GUI_TextEdit__apply_change(TextEdit *textedit, const TextEdit_Change *chang
     GUI_TextEdit__update_linebreaks(textedit, 0);
 }
 
-void GUI_TextEdit__undo_change(TextEdit *textedit, const TextEdit_Change *change) {
-    if (change->is_insert) {
-        strbuf_pop_at_index(
-            &textedit->buffer, change->start, change->buffer->size);
-        textedit->cursor = change->start;
-    } else {
-        strbuf_insert_at_index(
-            &textedit->buffer, change->start, strview_of_buf(change->buffer));
-        textedit->cursor += change->buffer->size;
-    }
-    GUI_TextEdit__update_linebreaks(textedit, 0);
-}
-
 void GUI_TextEdit__insert(TextEdit *textedit, int start, strview_t str) {
+    // Discard undo history to create a 'new branch'.
+    GUI_TextEdit__discard_undo_log(textedit);
+
     TextEditRing_extend_head_force(&textedit->editlog.ring);
     TextEdit_Change *change = TextEditRing_get_head(&textedit->editlog.ring);
     if (change == NULL) { return; }
@@ -477,7 +477,7 @@ void GUI_TextEdit__insert(TextEdit *textedit, int start, strview_t str) {
     change->start = start;
     strbuf_assign(&change->buffer, str);
     strbuf_shrink(&change->buffer);
-    GUI_TextEdit__apply_change(textedit, change);
+    GUI_TextEdit__apply_change(textedit, change, false);
 }
 
 void GUI_TextEdit__delete_chunk(TextEdit *textedit, int start, int size) {
@@ -491,7 +491,7 @@ void GUI_TextEdit__delete_chunk(TextEdit *textedit, int start, int size) {
             strview_sub(strview_of_buf(textedit->buffer), start, start+size);
     strbuf_assign(&change->buffer, chunk);
     strbuf_shrink(&change->buffer);
-    GUI_TextEdit__apply_change(textedit, change);
+    GUI_TextEdit__apply_change(textedit, change, false);
 }
 
 void GUI_TextEdit__delete_selection(TextEdit *textedit) {
@@ -786,18 +786,25 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     }
 
     // undo & redo
-    static uint debug_cursor = 0;
-    if (control && IsKeyPressed(KEY_Z)) {
-        //if (debug_cursor < textedit->editlog.ring.)
-        TextEdit_Change *change = TextEditRing_get_from_tail(
-                &textedit->editlog.ring, debug_cursor);
+    if (control && shift && IsKeyPressed(KEY_Z)) {
+        TextEdit_Change *change = TextEditRing_get_from_head(
+                &textedit->editlog.ring,
+                textedit->editlog.cursor -1);
         if (change != NULL) {
-            --debug_cursor;
-            GUI_TextEdit__undo_change(textedit, change);
+            GUI_TextEdit__apply_change(textedit, change, false);
+            --textedit->editlog.cursor;
+            textedit->is_selecting = false;
         }
     }
-    if (control && shift && IsKeyPressed(KEY_Z)) {
-
+    else if (control && IsKeyPressed(KEY_Z)) {
+        TextEdit_Change *change = TextEditRing_get_from_head(
+                &textedit->editlog.ring,
+                textedit->editlog.cursor);
+        if (change != NULL) {
+            GUI_TextEdit__apply_change(textedit, change, true);
+            ++textedit->editlog.cursor;
+            textedit->is_selecting = false;
+        }
     }
 
     // scroll to cursor

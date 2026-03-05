@@ -161,21 +161,25 @@ static TYPE *PRE(pop_head) (WRing *ring) {
  * @returns Reference to item.
  */
 static TYPE *PRE(get_from_head) (WRing *ring, uint pos) {
+    if (pos >= ring->size) { return NULL; }
 	uint index = (ring->_head - pos) % ring->_capacity;
 	return &ring->buffer[index];
 }
 
 /* @returns Reference to item. */
 static TYPE *PRE(get_from_tail) (WRing *ring, uint pos) {
+    if (pos >= ring->size) { return NULL; }
 	uint index = (ring->_tail + pos) % ring->_capacity;
 	return &ring->buffer[index];
 }
 
 static TYPE *PRE(get_head) (WRing *ring) {
+    if (ring->size <= 0) { return NULL; }
     return &ring->buffer[ring->_head];
 }
 
 static TYPE *PRE(get_tail) (WRing *ring) {
+    if (ring->size <= 0) { return NULL; }
     return &ring->buffer[ring->_tail];
 }
 
