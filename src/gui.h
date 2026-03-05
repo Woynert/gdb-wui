@@ -58,6 +58,8 @@ typedef struct TextEdit {
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
     uint_DynArr linebreaks;
     int line_amount;
+    /* cached */
+    int cursor_line;
 } TextEdit;
 
 
@@ -320,19 +322,69 @@ bool GUI_TextEdit_is_unicode_in_range(int unicode) {
     // https://en.wikipedia.org/wiki/List_of_Unicode_characters
 }
 
+void GUI_TextEdit__cursor_down(TextEdit *textedit, int cursor_line) {
+    int break1 = -1;
+    if (cursor_line -1 >= 0) { 
+        break1 = (int)textedit->linebreaks.items[cursor_line];
+    }
+    int break2 = (int)textedit->linebreaks.items[cursor_line+1];
+    int break3;
+    if (cursor_line +1 >= (int)textedit->linebreaks.size) {
+        break3 = textedit->buffer->size;
+    } else {
+        break3 = (int)textedit->linebreaks.items[cursor_line+2];
+    }
+
+    int new_cursor = int_min(
+        textedit->cursor + break2 - break1,
+        break3
+    );
+    textedit->cursor = new_cursor;
+}
+
+void GUI_TextEdit__cursor_up(TextEdit *textedit, int cursor_line) {
+    int break1 = -1;
+    if (cursor_line -1 > 0) { 
+        break1 = (int)textedit->linebreaks.items[cursor_line-1];
+    }
+    int break2 = (int)textedit->linebreaks.items[cursor_line];
+
+    int new_cursor = int_min(
+            textedit->cursor - (break2 - break1),
+            break2
+        );
+    textedit->cursor = new_cursor;
+}
+
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
-
-    textedit->scroll -= (int)GetMouseWheelMove();
-    textedit->scroll =
-        int_max(0, int_min((int)textedit->line_amount, textedit->scroll));
-    int scroll = textedit->scroll;
 
     float line_spacing = 2;
     float line_height = GUI.font_size + line_spacing;
     float number_padding = fmaxf(3, (GUI.font_width + GUI.font_spacing)
         * (ceilf(((float)textedit->line_amount +1) / 10.f) +1));
+
+    // scrolling
+
+    if (GetMouseWheelMove() != 0) {
+        textedit->scroll -= GetMouseWheelMove() > 0 ? 1 : -1;
+        textedit->scroll =
+            int_max(0, int_min((int)textedit->line_amount, textedit->scroll));
+
+        // keep cursor on view
+        if (textedit->cursor_line < textedit->scroll) {
+            GUI_TextEdit__cursor_down(textedit, textedit->cursor_line);
+            ++textedit->cursor_line;
+        }
+        if (textedit->cursor_line > textedit->scroll
+                + (int)(view_rect.height / line_height)
+        ) {
+            GUI_TextEdit__cursor_up(textedit, textedit->cursor_line);
+            --textedit->cursor_line;
+        }
+    }
+    int scroll = textedit->scroll;
 
     /*
      * Some of these variables only need to be updated on cursor change, however
@@ -520,6 +572,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
         --textedit->cursor;
     }
+
     if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
     ) {
         if (shift) {
@@ -532,39 +585,16 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
         ++textedit->cursor;
     }
+
     if (IsKeyPressed(KEY_DOWN) && (cursor_line < (int)(textedit->line_amount))
     ) {
-        int break1 = -1;
-        if (cursor_line -1 >= 0) { 
-            break1 = (int)textedit->linebreaks.items[cursor_line];
-        }
-        int break2 = (int)textedit->linebreaks.items[cursor_line+1];
-        int break3;
-        if (cursor_line +1 >= (int)textedit->linebreaks.size) {
-            break3 = textedit->buffer->size;
-        } else {
-            break3 = (int)textedit->linebreaks.items[cursor_line+2];
-        }
-
-        int new_cursor = int_min(
-            textedit->cursor + break2 - break1,
-            break3
-        );
-        textedit->cursor = new_cursor;
+        GUI_TextEdit__cursor_down(textedit, cursor_line);
     }
+
     if (IsKeyPressed(KEY_UP) && (cursor_line > 0)) {
-        int break1 = -1;
-        if (cursor_line -1 > 0) { 
-            break1 = (int)textedit->linebreaks.items[cursor_line-1];
-        }
-        int break2 = (int)textedit->linebreaks.items[cursor_line];
-
-        int new_cursor = int_min(
-                textedit->cursor - (break2 - break1),
-                break2
-            );
-        textedit->cursor = new_cursor;
+        GUI_TextEdit__cursor_up(textedit, cursor_line);
     }
+
     if (IsKeyPressed(KEY_BACKSPACE) && (textedit->cursor > 0)) {
         --textedit->cursor;
 
@@ -573,22 +603,20 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
         return;
     }
-    // write character
+
     char new_char[2] = { '\0', '\0' };
     int codepoint;
-    while ((codepoint = GetCharPressed())) {
-        if (GUI_TextEdit_is_unicode_in_range(codepoint))
-        {
-            new_char[0] = (char)codepoint;
-            strbuf_insert_at_index_cstr(
-                    &textedit->buffer, textedit->cursor, new_char);
-            ++textedit->cursor;
-            GUI_TextEdit_update_linebreaks(textedit, 0);
-        }
-        else {
-            printf("codepoint %d\n", codepoint);
-        }
+    while ((codepoint = GetCharPressed())) // write text
+    { 
+        if (!GUI_TextEdit_is_unicode_in_range(codepoint)) continue;
+
+        new_char[0] = (char)codepoint;
+        strbuf_insert_at_index_cstr(
+                &textedit->buffer, textedit->cursor, new_char);
+        ++textedit->cursor;
+        GUI_TextEdit_update_linebreaks(textedit, 0);
     }
+
     if (IsKeyPressed(KEY_ENTER)) {
         new_char[0] = (char)'\n';
         strbuf_insert_at_index_cstr(
@@ -597,6 +625,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         GUI_TextEdit_update_linebreaks(textedit, 0);
         return;
     }
+
     // paste
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
         if (IsKeyPressed(KEY_V)) {
@@ -610,9 +639,19 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             return;
         }
     }
+
     if (IsKeyPressed(KEY_ESCAPE)) {
         textedit->is_selecting = false;
     }
+
+    // scroll to cursor
+    while (cursor_line < textedit->scroll) {
+        --textedit->scroll;
+    }
+    while (cursor_line > textedit->scroll + (int)(view_rect.height / line_height)) {
+        ++textedit->scroll;
+    }
+    textedit->cursor_line = cursor_line;
 }
 
 void GUI_draw_all(WuiState *state) {
@@ -632,7 +671,7 @@ void GUI_draw_all(WuiState *state) {
 
     // TextEdit
 
-    view_rect = (Rect2) {{ 150, 150, 240, 300 }};
+    view_rect = (Rect2) {{ 150, 150, 240, 150 }};
     GUI_TextEdit_draw(&GUI.textedit, view_rect);
     BeginTextureMode(GUI.final_texture);
         DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
