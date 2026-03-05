@@ -36,7 +36,7 @@ enum POPUP {
 #define GUI_OPTIONS_STRING_LEN 1024
 #define GUI_POPUP_PAD 3
 
-
+/* Text Editor */
 
 #ifndef DYN_ARR_TYPE_UINT
 #define DYN_ARR_TYPE_UINT
@@ -46,6 +46,25 @@ enum POPUP {
 #undef  DYN_ARR_TYPE
 #endif
 
+typedef struct TextEdit_Change {
+    bool is_insert;  // false == deletion
+    int start;
+    int delete_size; // only for deletion
+    strbuf_t *buffer;
+} TextEdit_Change;
+
+#define RINGBUFFER_TYPE TextEdit_Change
+#define RINGBUFFER_PREFIX TextEdit_
+#include "containers/ringbuffer.h"
+#undef RINGBUFFER_TYPE
+#undef RINGBUFFER_PREFIX
+
+#define TEXTEDIT_LOG_SIZE 256
+
+typedef struct TextEdit_Log {
+    TextEdit_RinBuf ring;
+    int cursor;
+} TextEdit_Log;
 
 typedef struct TextEdit {
     bool enabled;
@@ -58,14 +77,20 @@ typedef struct TextEdit {
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
     uint_DynArr linebreaks;
     int line_amount;
+    TextEdit_Log editlog;
     /* cached */
     int cursor_line;
 } TextEdit;
 
-
 void GUI_TextEdit_init(TextEdit *textedit) {
     textedit->buffer = strbuf_create(0, NULL);
     textedit->linebreaks = uint_DynArr_create();
+
+    textedit->editlog.ring =
+        TextEdit_RinBuf_create(TEXTEDIT_LOG_SIZE, (TextEdit_Change) {0} );
+    for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
+        textedit->editlog.ring.buffer[i].buffer = strbuf_create(0, NULL);
+    }
 }
 
 struct {
@@ -284,7 +309,7 @@ void GUI_draw_popups(void) {
 
 // FIXME: This startindex doesn't work because we are not preserving previous
 //        lines.
-void GUI_TextEdit_update_linebreaks(TextEdit *textedit, int startindex) {
+void GUI_TextEdit__update_linebreaks(TextEdit *textedit, int startindex) {
     strview_t buffer = strview_of_buf(textedit->buffer);
     if (startindex >= buffer.size) { startindex = 0; };
     uint_DynArr_clear_preserving_capacity(&textedit->linebreaks);
@@ -305,7 +330,7 @@ void GUI_TextEdit_enable(TextEdit *textedit, strview_t initial_buffer) {
     textedit->enabled = true;
     textedit->cursor = 0;
     strbuf_assign(&textedit->buffer, initial_buffer);
-    GUI_TextEdit_update_linebreaks(textedit, 0);
+    GUI_TextEdit__update_linebreaks(textedit, 0);
 }
 
 void GUI_TextEdit_disable(TextEdit *textedit) {
@@ -354,21 +379,6 @@ void GUI_TextEdit__cursor_up(TextEdit *textedit, int cursor_line) {
             break2
         );
     textedit->cursor = new_cursor;
-}
-
-void GUI_TextEdit__delete_selection(TextEdit *textedit) {
-    int start, end;
-    if (textedit->cursor > textedit->selection_origin) {
-        start = textedit->selection_origin;
-        end = textedit->cursor;
-    } else {
-        start = textedit->cursor;
-        end = textedit->selection_origin;
-    }
-    strbuf_pop_at_index(&textedit->buffer, start, end-start);
-    textedit->is_selecting = false;
-    textedit->cursor = start;
-    GUI_TextEdit_update_linebreaks(textedit, 0);
 }
 
 void GUI_TextEdit__update_selection(
@@ -432,6 +442,60 @@ void GUI_TextEdit__move_by_world(TextEdit *textedit, int dir) {
     }
     exit_loop:
     textedit->cursor = new_cursor;
+}
+
+void GUI_TextEdit__apply_change(TextEdit *textedit, const TextEdit_Change *change) {
+    if (change->is_insert) {
+        strbuf_insert_at_index(
+            &textedit->buffer, change->start, strview_of_buf(change->buffer));
+        textedit->cursor += change->buffer->size;
+    } else {
+        strbuf_pop_at_index(
+                &textedit->buffer, change->start, change->delete_size);
+        textedit->cursor = change->start;
+    }
+    GUI_TextEdit__update_linebreaks(textedit, 0);
+}
+
+void GUI_TextEdit__insert(TextEdit *textedit, int start, strview_t str) {
+    TextEdit_Change *change = NULL;
+    TextEdit_RinBuf_push_and_get(&textedit->editlog.ring, &change);
+    if (change == NULL) { return; }
+    change->is_insert = true;
+    change->start = start;
+    strbuf_assign(&change->buffer, str);
+    strbuf_shrink(&change->buffer);
+    GUI_TextEdit__apply_change(textedit, change);
+}
+
+void GUI_TextEdit__delete_chunk(TextEdit *textedit, int start, int size) {
+    TextEdit_Change *change = NULL;
+    TextEdit_RinBuf_push_and_get(&textedit->editlog.ring, &change);
+    if (change == NULL) { return; }
+    change->is_insert = false;
+    change->start = start;
+    change->delete_size = size;
+    strview_t chunk =
+            strview_sub(strview_of_buf(textedit->buffer), start, start+size);
+    strbuf_assign(&change->buffer, chunk);
+    strbuf_shrink(&change->buffer);
+    GUI_TextEdit__apply_change(textedit, change);
+}
+
+void GUI_TextEdit__delete_selection(TextEdit *textedit) {
+    int start, end;
+    if (textedit->cursor > textedit->selection_origin) {
+        start = textedit->selection_origin;
+        end = textedit->cursor;
+    } else {
+        start = textedit->cursor;
+        end = textedit->selection_origin;
+    }
+    //strbuf_pop_at_index(&textedit->buffer, start, end-start);
+    textedit->is_selecting = false;
+    //textedit->cursor = start;
+    
+    GUI_TextEdit__delete_chunk(textedit, start, end -start);
 }
 
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
@@ -668,9 +732,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         if (textedit->is_selecting) {
             GUI_TextEdit__delete_selection(textedit);
         } else if (textedit->cursor > 0) {
-            --textedit->cursor;
-            strbuf_pop_at_index(&textedit->buffer, textedit->cursor, 1);
-            GUI_TextEdit_update_linebreaks(textedit, 0);
+            GUI_TextEdit__delete_chunk(textedit, textedit->cursor-1, 1);
         }
     }
 
@@ -685,10 +747,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         }
 
         new_char[0] = (char)codepoint;
-        strbuf_insert_at_index_cstr(
-                &textedit->buffer, textedit->cursor, new_char);
-        ++textedit->cursor;
-        GUI_TextEdit_update_linebreaks(textedit, 0);
+        GUI_TextEdit__insert(textedit, textedit->cursor, cstr(new_char));
     }
 
     if (IsKeyPressed(KEY_ENTER)) {
@@ -697,10 +756,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         }
 
         new_char[0] = (char)'\n';
-        strbuf_insert_at_index_cstr(
-                &textedit->buffer, textedit->cursor, new_char);
-        ++textedit->cursor;
-        GUI_TextEdit_update_linebreaks(textedit, 0);
+        GUI_TextEdit__insert(textedit, textedit->cursor, cstr(new_char));
         return;
     }
 
@@ -713,16 +769,8 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
                 GUI_TextEdit__delete_selection(textedit);
             }
 
-            strbuf_insert_at_index(
-                &textedit->buffer, textedit->cursor, clipboard);
-
-            GUI_TextEdit_update_linebreaks(textedit, 0);
-            textedit->cursor += clipboard.size;
+            GUI_TextEdit__insert(textedit, textedit->cursor, clipboard);
         }
-    }
-
-    if (IsKeyPressed(KEY_ESCAPE)) {
-        textedit->is_selecting = false;
     }
 
     // scroll to cursor
