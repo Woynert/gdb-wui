@@ -74,7 +74,7 @@ typedef struct TextEdit {
     int selection_origin;
     int selection_line;
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
-    uint_DynArr linebreaks;
+    uint_DynArr linebreaks; /* Todo: Mark linebreaks as dirty. */
     int line_amount;
     TextEdit_Log editlog;
     /* cached */
@@ -503,11 +503,30 @@ void GUI_TextEdit__delete_selection(TextEdit *textedit) {
         start = textedit->cursor;
         end = textedit->selection_origin;
     }
-    //strbuf_pop_at_index(&textedit->buffer, start, end-start);
+    if (start - end == 0) { return; }
+
     textedit->is_selecting = false;
-    //textedit->cursor = start;
-    
     GUI_TextEdit__delete_chunk(textedit, start, end -start);
+}
+
+void GUI_TextEdit__copy_selection(TextEdit *textedit) {
+    int start, end;
+    if (textedit->cursor > textedit->selection_origin) {
+        start = textedit->selection_origin;
+        end = textedit->cursor;
+    } else {
+        start = textedit->cursor;
+        end = textedit->selection_origin;
+    }
+    if (start - end == 0) { return; }
+
+    // SetClipboardText requires a c-string so to not allocate a gigantic
+    // buffer we're gonna use the original buffer and add NULL where the
+    // selection ends. Once finished we'll restore the original character.
+    char og_char = ((char *)textedit->buffer->cstr)[end];
+    (textedit->buffer->cstr)[end] = '\0';
+    SetClipboardText(textedit->buffer->cstr + start);
+    (textedit->buffer->cstr)[end] = og_char;
 }
 
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
@@ -772,7 +791,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         return;
     }
 
-    // paste
+    // copy / paste
     if (control && IsKeyPressed(KEY_V)) {
         const char *clipboard_cstr = GetClipboardText();
         strview_t clipboard = cstr(clipboard_cstr);
@@ -783,6 +802,9 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
             GUI_TextEdit__insert(textedit, textedit->cursor, clipboard);
         }
+    }
+    if (control && IsKeyPressed(KEY_C) && textedit->is_selecting) {
+        GUI_TextEdit__copy_selection(textedit);
     }
 
     // undo & redo
