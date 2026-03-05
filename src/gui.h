@@ -49,20 +49,19 @@ enum POPUP {
 typedef struct TextEdit_Change {
     bool is_insert;  // false == deletion
     int start;
-    int delete_size; // only for deletion
     strbuf_t *buffer;
 } TextEdit_Change;
 
-#define RINGBUFFER_TYPE TextEdit_Change
-#define RINGBUFFER_PREFIX TextEdit_
-#include "containers/ringbuffer.h"
-#undef RINGBUFFER_TYPE
-#undef RINGBUFFER_PREFIX
+#define WRING__TYPE TextEdit_Change
+#define WRING__NAMESPACE TextEditRing
+#include "containers/wring.h"
+#undef WRING__TYPE
+#undef WRING__NAMESPACE
 
 #define TEXTEDIT_LOG_SIZE 256
 
 typedef struct TextEdit_Log {
-    TextEdit_RinBuf ring;
+    TextEditRing ring;
     int cursor;
 } TextEdit_Log;
 
@@ -86,8 +85,7 @@ void GUI_TextEdit_init(TextEdit *textedit) {
     textedit->buffer = strbuf_create(0, NULL);
     textedit->linebreaks = uint_DynArr_create();
 
-    textedit->editlog.ring =
-        TextEdit_RinBuf_create(TEXTEDIT_LOG_SIZE, (TextEdit_Change) {0} );
+    textedit->editlog.ring = TextEditRing_create(TEXTEDIT_LOG_SIZE);
     for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
         textedit->editlog.ring.buffer[i].buffer = strbuf_create(0, NULL);
     }
@@ -451,16 +449,30 @@ void GUI_TextEdit__apply_change(TextEdit *textedit, const TextEdit_Change *chang
         textedit->cursor += change->buffer->size;
     } else {
         strbuf_pop_at_index(
-                &textedit->buffer, change->start, change->delete_size);
+                &textedit->buffer, change->start, change->buffer->size);
         textedit->cursor = change->start;
     }
     GUI_TextEdit__update_linebreaks(textedit, 0);
 }
 
+void GUI_TextEdit__undo_change(TextEdit *textedit, const TextEdit_Change *change) {
+    if (change->is_insert) {
+        strbuf_pop_at_index(
+            &textedit->buffer, change->start, change->buffer->size);
+        textedit->cursor = change->start;
+    } else {
+        strbuf_insert_at_index(
+            &textedit->buffer, change->start, strview_of_buf(change->buffer));
+        textedit->cursor += change->buffer->size;
+    }
+    GUI_TextEdit__update_linebreaks(textedit, 0);
+}
+
 void GUI_TextEdit__insert(TextEdit *textedit, int start, strview_t str) {
-    TextEdit_Change *change = NULL;
-    TextEdit_RinBuf_push_and_get(&textedit->editlog.ring, &change);
+    TextEditRing_extend_head_force(&textedit->editlog.ring);
+    TextEdit_Change *change = TextEditRing_get_head(&textedit->editlog.ring);
     if (change == NULL) { return; }
+
     change->is_insert = true;
     change->start = start;
     strbuf_assign(&change->buffer, str);
@@ -469,12 +481,12 @@ void GUI_TextEdit__insert(TextEdit *textedit, int start, strview_t str) {
 }
 
 void GUI_TextEdit__delete_chunk(TextEdit *textedit, int start, int size) {
-    TextEdit_Change *change = NULL;
-    TextEdit_RinBuf_push_and_get(&textedit->editlog.ring, &change);
+    TextEditRing_extend_head_force(&textedit->editlog.ring);
+    TextEdit_Change *change = TextEditRing_get_head(&textedit->editlog.ring);
     if (change == NULL) { return; }
+
     change->is_insert = false;
     change->start = start;
-    change->delete_size = size;
     strview_t chunk =
             strview_sub(strview_of_buf(textedit->buffer), start, start+size);
     strbuf_assign(&change->buffer, chunk);
@@ -771,6 +783,21 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
             GUI_TextEdit__insert(textedit, textedit->cursor, clipboard);
         }
+    }
+
+    // undo & redo
+    static uint debug_cursor = 0;
+    if (control && IsKeyPressed(KEY_Z)) {
+        //if (debug_cursor < textedit->editlog.ring.)
+        TextEdit_Change *change = TextEditRing_get_from_tail(
+                &textedit->editlog.ring, debug_cursor);
+        if (change != NULL) {
+            --debug_cursor;
+            GUI_TextEdit__undo_change(textedit, change);
+        }
+    }
+    if (control && shift && IsKeyPressed(KEY_Z)) {
+
     }
 
     // scroll to cursor

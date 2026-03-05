@@ -36,7 +36,7 @@ void sleep_ms(int milliseconds){
 #define ASSERT(value) \
     do { \
         if ((value) != true) { \
-            printf("\nFailed assert %s|%s:%d\n", \
+            printf("\nFAILED ASSERT %s|%s:%d\n", \
                     __func__, __FILE__, __LINE__); \
             printf(#value); \
             printf("\n"); \

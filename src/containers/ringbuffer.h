@@ -99,19 +99,9 @@ static TYPE *PRE(RinBuf_get_relative) (const PRE(RinBuf) *r, size_t position) {
 }
 
 
-static TYPE *PRE(RinBuf_get_absolute) (const PRE(RinBuf) *r, size_t index) {
-    if (r->size == 0) return NULL;
-    return &r->buffer[index];
-}
-
-
 static TYPE *PRE(RinBuf_get_at) (const PRE(RinBuf) *r, size_t position) {
     if (r->size == 0) return NULL;
     return &r->buffer[FAST_MODULUS(position, r->size)];
-}
-
-static size_t PRE(RinBuf_get_size) (const PRE(RinBuf) *r) {
-    return r->size;
 }
 
 

@@ -1,6 +1,4 @@
-#include "stdlib.h"
 #include "stdbool.h"
-#include "string.h"
 #include "stdio.h"
 
 /*
@@ -34,7 +32,6 @@
 #define TREESI__TOKCAT(a, b) TREESI__TOKCAT_(a, b)
 #ifndef TREESI__NAMESPACE
 #define TREESI__NAMESPACE TREESI__TOKCAT(TREESI__TYPE, _TreeSi)
-#else
 #endif
 #define TREESI__PRE(name) TREESI__TOKCAT(TREESI__TOKCAT(TREESI__NAMESPACE, _), name)
 /* use TREESI__PRE as namespace */
