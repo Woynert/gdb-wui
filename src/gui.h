@@ -389,6 +389,51 @@ void GUI_TextEdit__update_selection(
     }
 }
 
+void GUI_TextEdit__move_by_world(TextEdit *textedit, int dir) {
+    strview_t delimiters = cstr("\n(){};.,\"\'#");
+    int new_cursor;
+    bool found_space = false;
+
+    if (dir > 0) {
+        new_cursor = textedit->buffer->size;
+        for (int i = textedit->cursor+1; i < textedit->buffer->size; ++i) {
+            if (textedit->buffer->cstr[i] == ' ') {
+                found_space = true;
+                continue;
+            }
+            for (int k = 0; k < delimiters.size; ++k) {
+                if (textedit->buffer->cstr[i] == delimiters.data[k] || found_space) {
+                    new_cursor = i;
+                    goto exit_loop;
+                }
+            }
+        }
+    } else {
+        // Only check for Char-Space diff when going LEFT like GTK.
+        bool found_char = false; 
+        new_cursor = 0;
+        for (int i = textedit->cursor-2; i >= 0; --i) {
+            if (textedit->buffer->cstr[i] == ' ') {
+                if (found_char) {
+                    new_cursor = i +1;
+                    goto exit_loop;
+                }
+                found_space = true;
+                continue;
+            }
+            for (int k = 0; k < delimiters.size; ++k) {
+                if (textedit->buffer->cstr[i] == delimiters.data[k] || found_space) {
+                    new_cursor = i +1;
+                    goto exit_loop;
+                }
+            }
+            found_char = true;
+        }
+    }
+    exit_loop:
+    textedit->cursor = new_cursor;
+}
+
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
@@ -593,16 +638,19 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     // controls
 
     bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
     if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
         GUI_TextEdit__update_selection(textedit, shift, cursor_line);
-        --textedit->cursor;
+        if (control) GUI_TextEdit__move_by_world(textedit, -1);
+        else --textedit->cursor;
     }
 
     if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
     ) {
         GUI_TextEdit__update_selection(textedit, shift, cursor_line);
-        ++textedit->cursor;
+        if (control) GUI_TextEdit__move_by_world(textedit, +1);
+        else ++textedit->cursor;
     }
 
     if (IsKeyPressed(KEY_DOWN) && (cursor_line < (int)(textedit->line_amount))
@@ -657,21 +705,19 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     }
 
     // paste
-    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
-        if (IsKeyPressed(KEY_V)) {
-            const char *clipboard_cstr = GetClipboardText();
-            strview_t clipboard = cstr(clipboard_cstr);
-            if (clipboard.size > 0) {
-                if (textedit->is_selecting) {
-                    GUI_TextEdit__delete_selection(textedit);
-                }
-
-                strbuf_insert_at_index(
-                    &textedit->buffer, textedit->cursor, clipboard);
-
-                GUI_TextEdit_update_linebreaks(textedit, 0);
-                textedit->cursor += clipboard.size;
+    if (control && IsKeyPressed(KEY_V)) {
+        const char *clipboard_cstr = GetClipboardText();
+        strview_t clipboard = cstr(clipboard_cstr);
+        if (clipboard.size > 0) {
+            if (textedit->is_selecting) {
+                GUI_TextEdit__delete_selection(textedit);
             }
+
+            strbuf_insert_at_index(
+                &textedit->buffer, textedit->cursor, clipboard);
+
+            GUI_TextEdit_update_linebreaks(textedit, 0);
+            textedit->cursor += clipboard.size;
         }
     }
 
