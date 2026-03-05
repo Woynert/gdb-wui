@@ -371,6 +371,24 @@ void GUI_TextEdit__delete_selection(TextEdit *textedit) {
     GUI_TextEdit_update_linebreaks(textedit, 0);
 }
 
+void GUI_TextEdit__update_selection(
+    TextEdit *textedit, bool shift, int cursor_line
+) {
+    // shift    + no_selecting -> start selecting
+    // shift    + selecting    -> continue selecting
+    // no shift + selecting    -> stop selecting
+    if (shift) {
+        if (!textedit->is_selecting) {
+            textedit->selection_origin = textedit->cursor;
+            textedit->selection_line = cursor_line;
+            textedit->is_selecting = true;
+        }
+    }
+    else if (textedit->is_selecting) {
+        textedit->is_selecting = false;
+    }
+}
+
 void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
@@ -577,36 +595,24 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 
     if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
-        if (shift) {
-            if (!textedit->is_selecting) {
-                textedit->selection_origin = textedit->cursor;
-                textedit->selection_line = cursor_line;
-            }
-            textedit->is_selecting = true;
-        }
-
+        GUI_TextEdit__update_selection(textedit, shift, cursor_line);
         --textedit->cursor;
     }
 
     if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
     ) {
-        if (shift) {
-            if (!textedit->is_selecting) {
-                textedit->selection_origin = textedit->cursor;
-                textedit->selection_line = cursor_line;
-            }
-            textedit->is_selecting = true;
-        }
-
+        GUI_TextEdit__update_selection(textedit, shift, cursor_line);
         ++textedit->cursor;
     }
 
     if (IsKeyPressed(KEY_DOWN) && (cursor_line < (int)(textedit->line_amount))
     ) {
+        GUI_TextEdit__update_selection(textedit, shift, cursor_line);
         GUI_TextEdit__cursor_down(textedit, cursor_line);
     }
 
     if (IsKeyPressed(KEY_UP) && (cursor_line > 0)) {
+        GUI_TextEdit__update_selection(textedit, shift, cursor_line);
         GUI_TextEdit__cursor_up(textedit, cursor_line);
     }
 
