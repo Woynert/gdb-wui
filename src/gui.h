@@ -9,7 +9,6 @@
 #include "raymath.h"
 #include "raylib_extra.h"
 #include "strbuf.h"
-#include "strnum.h"
 #include "strview.h"
 #include "strbuf_extra.h"
 #include "portable_utils.h"
@@ -67,6 +66,18 @@ typedef struct TextEdit_Change {
 #undef WRING__TYPE
 #undef WRING__NAMESPACE
 
+typedef struct TextEditVisualLine {
+    int start; /* byte id on source buffer */
+    int end;   /* byte id on source buffer */
+    int line;  /* line id on source buffer */
+    int wrap;  /* visual line wrap count */
+} TextEditVisualLine;
+
+#define DYN_ARR_TYPE TextEditVisualLine
+#undef  DYN_ARR_PREFIX
+#include "containers/da.h"
+#undef  DYN_ARR_TYPE
+
 #define TEXTEDIT_LOG_SIZE 256
 
 typedef struct TextEdit_Log {
@@ -79,20 +90,26 @@ typedef struct TextEdit {
     int cursor;
     //bool wrap;
     int scroll;
+    int wrap_scroll;
     bool is_selecting;
     int selection_origin;
     int selection_line;
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
     int_DynArr linebreaks; /* Todo: Mark linebreaks as dirty. */
+    /* Chunks described as pair of indexes: start, end, start, end, ... */
+    TextEditVisualLine_DynArr visualblocks; 
     int line_amount;
     TextEdit_Log editlog;
     /* cached */
     int cursor_line;
+    int cursor_visual_line;
 } TextEdit;
 
 void GUI_TextEdit_init(TextEdit *textedit) {
+    *textedit = (TextEdit) { 0 };
     textedit->buffer = strbuf_create(0, NULL);
     textedit->linebreaks = int_DynArr_create();
+    textedit->visualblocks = TextEditVisualLine_DynArr_create();
 
     textedit->editlog.ring = TextEditRing_create(TEXTEDIT_LOG_SIZE);
     for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
@@ -321,7 +338,6 @@ void GUI_TextEdit__update_linebreaks(TextEdit *textedit, int startindex) {
     if (startindex >= buffer.size) { startindex = 0; };
     int_DynArr_clear_preserving_capacity(&textedit->linebreaks);
 
-    //int_DynArr_insert(&textedit->linebreaks, 0);
     int_DynArr_insert(&textedit->linebreaks, -1);
     for (int i = startindex; i < textedit->buffer->size; ++i) {
         if (buffer.data[i] == '\n') {
@@ -330,9 +346,6 @@ void GUI_TextEdit__update_linebreaks(TextEdit *textedit, int startindex) {
     }
     int_DynArr_insert(&textedit->linebreaks, textedit->buffer->size);
     textedit->line_amount = (int)textedit->linebreaks.size -2;
-    //textedit->line_amount = (int)textedit->linebreaks.size -1;
-
-    // Note: For more performance implement "update_linebreaks_around_cursor".
 }
 
 
@@ -358,199 +371,31 @@ bool GUI_TextEdit_is_unicode_in_range(int unicode) {
 }
 
 void GUI_TextEdit__cursor_down(TextEdit *textedit, int view_columns) {
-    /*
-    int break1 = -1;
-    if (cursor_line -1 >= 0) { 
-        break1 = (int)textedit->linebreaks.items[cursor_line];
-    }
-    int break2 = (int)textedit->linebreaks.items[cursor_line+1];
-    int break3;
-    if (cursor_line +1 >= (int)textedit->linebreaks.size) {
-        break3 = textedit->buffer->size;
-    } else {
-        break3 = (int)textedit->linebreaks.items[cursor_line+2];
-    }
+    if (textedit->cursor_visual_line +1 >= (int)textedit->visualblocks.size) { return; }
 
-    int new_cursor = int_min(
-        textedit->cursor + break2 - break1,
-        break3
+    const TextEditVisualLine curr_line =
+        textedit->visualblocks.items[textedit->cursor_visual_line];
+    const TextEditVisualLine next_line =
+        textedit->visualblocks.items[textedit->cursor_visual_line +1];
+
+    textedit->cursor = int_min(
+        next_line.start + textedit->cursor - curr_line.start,
+        next_line.end -1
     );
-    textedit->cursor = new_cursor;
-    */
-
-    int curr_line_end = 
-        textedit->linebreaks.items[textedit->cursor_line +1];
-
-    if (textedit->cursor_line < (int)(textedit->line_amount)) { return; }
-
-    int curr_line_len =
-        textedit->linebreaks.items[textedit->cursor_line +1] -
-        textedit->linebreaks.items[textedit->cursor_line] -1
-    ;
-    int next_line_start = 
-        textedit->linebreaks.items[textedit->cursor_line +1]+1;
-    int next_line_end = 
-        textedit->linebreaks.items[textedit->cursor_line +2];
-    int curr_line_start = 
-        textedit->linebreaks.items[textedit->cursor_line]+1;
-
-    int curr_tip_value;
-    if (curr_line_len > view_columns) {
-        //curr_tip_value =
-            //(textedit->cursor - curr_line_start)
-                //- ((((textedit->cursor - curr_line_start) - 1) % view_columns) + 1);
-        //curr_tip_value =
-            //(textedit->cursor - curr_line_start)
-                //- ((textedit->cursor - curr_line_start) / view_columns) * view_columns;
-
-        //curr_tip_value =
-                //((((textedit->cursor - curr_line_start) - 1) % view_columns) + 1);
-
-        curr_tip_value =
-            (textedit->cursor - curr_line_start)
-                - ((textedit->cursor - curr_line_start) / view_columns) * view_columns;
-        //if (textedit->cursor > curr_line_start
-            //&& (textedit->cursor - curr_line_start) % view_columns == 0
-        //) {
-            //curr_tip_value = view_columns;
-        //}
-        if (textedit->cursor == curr_line_end
-            && textedit->cursor > curr_line_start
-        ) {
-            curr_tip_value = view_columns;
-        }
-
-        /*
-X  Y
-0  0
-1  0
-2  0
-3  0
-4  0
-5  1
-6  1
-7  1
-8  1
-9  1
-10 2
-11 2
-12 2
-13 2
-14 2
-15 3
-           */
-        //if (cur
-        //curr_tip_value = view_columns;
-
-        //curr_tip_value =
-            //(textedit->cursor - curr_line_start)
-                //- (curr_line_len / view_columns) * view_columns;
-    }
-    else {
-        curr_tip_value = textedit->cursor - curr_line_start;
-    }
-
-    //int mimos = (((prev_line_len - 1) % view_columns) + 1);
-    printf("curr_line_len / view_columns %d\n", curr_line_len / view_columns);
-    printf("curr_tip_value %d\n", curr_tip_value);
-    printf("curr_line_len %d\n", curr_line_len);
-    printf("view_columns %d\n", view_columns);
-    //printf("view_columns %% curr_line_len %d\n", view_columns % curr_line_len );
-    printf("(curr_line_len - (textedit->cursor - curr_line_start)) %d\n",
-        (curr_line_len - (textedit->cursor - curr_line_start)));
-    printf("%d\n",
-        ((curr_line_len % view_columns) >=
-            (curr_line_len - (textedit->cursor - curr_line_start)))
-    );
-    printf("curr_line_end - textedit->cursor %d\n",
-        curr_line_end - textedit->cursor);
-    printf("view_columns %d\n", view_columns);
-    printf("%d\n",
-       (curr_line_end - textedit->cursor <= view_columns)
-    );
-
-    if (curr_line_len <= view_columns) { // start of body
-            textedit->cursor = int_min(
-                next_line_start + curr_tip_value,
-                next_line_end
-            );
-    }
-    else if ( // end of body
-        ((view_columns % curr_line_len ) >=
-            (curr_line_len - (textedit->cursor - curr_line_start)))
-      && (curr_line_end - textedit->cursor <= view_columns)
-    ) {
-        printf("CCCC\n");
-        textedit->cursor = int_min(
-            next_line_start + curr_tip_value,
-            next_line_end
-        );
-    }
-    else { // Through big body
-        printf("---->BBBB\n");
-        textedit->cursor = int_min(
-            textedit->cursor + view_columns,
-            curr_line_end
-        );
-    }
 }
 
 void GUI_TextEdit__cursor_up(TextEdit *textedit, int view_columns) {
-    /*
-    int break1 = -1;
-    if (cursor_line -1 > 0) { 
-        break1 = (int)textedit->linebreaks.items[cursor_line-1];
-    }
-    int break2 = (int)textedit->linebreaks.items[cursor_line];
+    if (textedit->cursor_visual_line -1 < 0) { return; }
 
-    int new_cursor = int_min(
-            textedit->cursor - (break2 - break1),
-            break2
-        );
-    textedit->cursor = new_cursor;
-    */
-    int curr_line_start = textedit->linebreaks.items[textedit->cursor_line] +1;
-    printf("textedit->cursor - curr_line_start %d\n",
-            textedit->cursor - curr_line_start);
-    if (textedit->cursor - curr_line_start > view_columns) { // through body
-        printf("CCCC\n");
-        textedit->cursor -= view_columns;
-        return;
-    }
-    if (textedit->cursor_line <= 0) { return; }
+    const TextEditVisualLine curr_line =
+        textedit->visualblocks.items[textedit->cursor_visual_line];
+    const TextEditVisualLine prev_line =
+        textedit->visualblocks.items[textedit->cursor_visual_line -1];
 
-    int prev_line_end = textedit->linebreaks.items[textedit->cursor_line];
-    int prev_line_start =
-        textedit->linebreaks.items[textedit->cursor_line-1] +1;
-    int prev_line_len =
-        textedit->linebreaks.items[textedit->cursor_line] -
-        textedit->linebreaks.items[textedit->cursor_line-1] -1
-    ;
-
-    if (prev_line_len > view_columns) {
-        printf("BBBB\n");
-        int curr_tip_value = textedit->cursor - curr_line_start;
-
-        //int prev_remain_value = (prev_line_len % view_columns);
-        //if (prev_line_len > 0 && prev_line_len % view_columns == 0) {
-            //prev_remain_value = view_columns;
-        //}
-
-        int prev_remain_value = ((prev_line_len - 1) % view_columns) + 1;
-
-        printf("prev_line_len %d\n", prev_line_len);
-        printf("prev_line_len %% view_columns %d\n", prev_line_len % view_columns);
-        textedit->cursor = int_min(
-            prev_line_end - (prev_remain_value - curr_tip_value),
-            prev_line_end
-        );
-    } else {
-        printf("AAAA\n");
-        textedit->cursor = int_min(
-            prev_line_start + (textedit->cursor - curr_line_start),
-            prev_line_end
-        );
-    }
+    textedit->cursor = int_min(
+        prev_line.end -1,
+        prev_line.start + textedit->cursor - curr_line.start
+    );
 }
 
 void GUI_TextEdit__update_selection(
@@ -711,8 +556,9 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     float line_height = GUI.font_size + line_spacing;
     float number_padding = fmaxf(3, (GUI.font_width + GUI.font_spacing)
         * (ceilf(((float)textedit->line_amount +1) / 10.f) +1));
-    int view_columns = (int)floorf((view_rect.width - number_padding) /
-                    (GUI.font_width + GUI.font_spacing)) -2;
+    //int view_columns = (int)floorf((view_rect.width - number_padding) /
+                    //(GUI.font_width + GUI.font_spacing)) -2;
+    int view_columns = 21;
 
     // scrolling
 
@@ -733,7 +579,6 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             //--textedit->cursor_line;
         }
     }
-    int scroll = textedit->scroll;
 
     /*
      * Some of these variables only need to be updated on cursor change, however
@@ -741,7 +586,6 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
      */
     // get cursor line
 
-    //int cursor_line = 0;
     textedit->cursor_line = 0;
     int chars_until_cursor_line = 0;
     int chars_until_selection = 0;
@@ -797,8 +641,8 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             select_start    = textedit->cursor - chars_til_start;
             select_end      = textedit->selection_origin - chars_til_end;
         }
-        line_start -= scroll;
-        line_end   -= scroll;
+        line_start -= textedit->scroll;
+        line_end   -= textedit->scroll;
         float start_x = view_rect.x + number_padding +
                 (float)(select_start) * (GUI.font_width + GUI.font_spacing);
         float end_x = view_rect.x + number_padding +
@@ -840,7 +684,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
                 (float)(textedit->selection_origin - chars_until_selection)
                     * (GUI.font_width + GUI.font_spacing),
             view_rect.y +
-                (float)(textedit->selection_line -scroll) * (GUI.font_size + line_spacing),
+                (float)(textedit->selection_line -textedit->scroll) * (GUI.font_size + line_spacing),
             2, GUI.font_size }, WHITE);
     }
 
@@ -852,18 +696,13 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     strview_t line = source;
     strview_t chunk = source;
     chars_until_cursor_line = 0;
-    int view_cursor_x = 0;
-    int view_cursor_y = 0;
 
     int view_max_lines = (int)floorf(view_rect.height / line_height);
     int wrapped_lines = 0;
 
-    int line_counter = 0;
     do {
 
-    if (scroll >= (int)(textedit->linebreaks.size-1)) { break; }
-
-    line = strview_sub(source, textedit->linebreaks.items[scroll] +1, INT_MAX);
+    if (textedit->scroll >= (int)(textedit->linebreaks.size-1)) { break; }
 
     Font font = GUI.font;
     Vector2 position = (Vector2){ view_rect.pos.x + number_padding, view_rect.pos.y };
@@ -875,199 +714,127 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     int textOffsetX = 0;
     strview_t string = line;
 
-    for (int i = 0, k = (int)(string.data - source.data); i <= string.size && textOffsetY <= view_max_lines;)
-    {
+    TextEditVisualLine_DynArr_clear_preserving_capacity(&textedit->visualblocks);
+
+    int initial_scroll = int_max(0, textedit->scroll-1);
+    int b = textedit->linebreaks.items[initial_scroll] +1; // byte
+    int chunk_start = b;
+    int line_counter = 0;
+    int wrap_counter = 0;
+    textOffsetX = 0;
+    textedit->cursor_visual_line = -1;
+
+    // TODO: update only on certain events
+
+    for (;b <= source.size && line_counter < view_max_lines;) {
+
         int codepointByteCount = 0;
-        int codepoint = GetCodepointNext(&string.data[i], &codepointByteCount);
+        int codepoint = GetCodepointNext(&string.data[b], &codepointByteCount);
 
-        if (k == textedit->cursor) {
-            view_cursor_x = textOffsetX;
-            view_cursor_y = textOffsetY;
-            textedit->cursor_line = line_counter + scroll;
-            printf("->>> %d %d\n", textOffsetX, k);
-
-            //if (view_cursor_x == view_columns
-                //&& string.data[textedit->cursor] == '\n'
-            //) {
-                //view
-            //}
-
-            if (view_cursor_x == view_columns
-                && source.data[textedit->cursor] != '\n'
-            ) {
-                view_cursor_x = 0;
-                view_cursor_y = textOffsetY +1;
-                //textedit->cursor_line = line_counter +1;
+        if (codepoint == '\n' || b == source.size) {
+            if ((textedit->cursor_line == (initial_scroll + line_counter))
+             && (textedit->cursor >= chunk_start)) {
+                textedit->cursor_visual_line = (int)textedit->visualblocks.size;
             }
-        }
 
-        if (i == string.size) {
-            break;
-        }
+            TextEditVisualLine_DynArr_insert(&textedit->visualblocks,
+                (TextEditVisualLine) {
+                    .start = chunk_start,
+                    .end   = b +1,
+                    .line = initial_scroll + line_counter,
+                    .wrap = wrap_counter
+                }
+            );
 
-        if (codepoint == '\n') {
-            //if (i < 30) {
-                //printf("%d:%d\n", textOffsetX, view_columns);
-            //}
-            //if (textOffsetX != view_columns) {
-                ++textOffsetY;
-                textOffsetX = 0;
-            //}
+            ++b; // skip codepoint
+            chunk_start = b;
+            textOffsetX = 0;
             ++line_counter;
+            wrap_counter = 0;
+            continue;
         }
         if (textOffsetX == view_columns) {
-            ++textOffsetY;
-            textOffsetX = 0;
-            ++wrapped_lines;
-        }
-
-        if (codepoint != '\n') {
-            if ((codepoint != ' ') && (codepoint != '\t')) {
-                DrawTextCodepoint(
-                    font, codepoint,
-                    (Vector2){
-                        position.x + (float)textOffsetX * (GUI.font_width + spacing),
-                        position.y + (float)textOffsetY * (fontSize + textLineSpacing)
-                    },
-                    fontSize, tint);
-            }
-            ++textOffsetX;
-        }
-        //i += codepointByteCount; // Move text bytes counter to next codepoint.
-        ++i;
-        ++k;
-        printf("%d:%d\n", i, string.size);
-    }
-    } while(0);
-    //textedit->cursor_line = line_counter;
-
-
-    printf("%d:%d:%d:%d:%d\n", textedit->cursor, view_cursor_x, view_cursor_y, textedit->cursor_line, line_counter);
-    /*
-2
-86:21:3:2:6
-1
-86:0:2:2:7
-       */
-
-    /*
-    for (int i = scroll, k = 0; k <= (int)ceilf(view_rect.height/line_height); ++k)
-    {
-        continue;
-        // i -> Buffer line counter.
-        // k -> Visual line counter.
-
-        // draw numbers
-
-        if (i <= textedit->line_amount) {
-            strbuf_printf(&aux_str, "%d", i);
-        } else {
-            strbuf_assign(&aux_str, cstr("~"));
-        }
-
-        DrawTextEx_strview(
-            GUI.font,
-            strview_of_buf(aux_str),
-            (Vector2) {view_rect.x, view_rect.y + line_height * (float)k},
-            GUI.font_size,
-            GUI.font_spacing,
-            0,
-            BLACK
-        );
-
-        // draw buffer
-
-        if (i >= (int)(textedit->linebreaks.size-1)) { continue; }
-
-        line.data = source.data + textedit->linebreaks.items[i] +1;
-        line.size = (int)textedit->linebreaks.items[i+1]
-                - (int)textedit->linebreaks.items[i];
-        chunk.data = line.data;
-        chunk.size = 0;
-        int first_try = 0;
-
-        while(chunk.data + chunk.size != line.data + line.size) {
-            chunk.data += chunk.size;
-            chunk.size = int_min(
-                view_columns,
-                (int)((line.data + line.size) - chunk.data)
-            );
-            bool final_line = chunk.data + chunk.size == line.data + line.size;
-            if (final_line && chunk.size == 1 && chunk.data[0] == '\n') {
-                break;
+            if ((textedit->cursor_line == (initial_scroll + line_counter))
+             && (textedit->cursor >= chunk_start)) {
+                textedit->cursor_visual_line = (int)textedit->visualblocks.size;
             }
 
-            //++first_try;
-            //if (first_try > 1) ++k;
-
-            // get cursor line
-            //if (textedit->cursor + (chunk.size < view_columns ? 1 : 0) > (int)(chunk.data - source.data)
-            if (textedit->cursor >= (int)(chunk.data - source.data)
-            ) {
-                cursor_line = k;
-                chars_until_cursor_line = (int)(chunk.data - source.data);
-            }
-            if (textedit->cursor > (int)(chunk.data - source.data)
-            ) {
-                //cursor_line = k;
-                //chars_until_cursor_line = (int)(chunk.data - source.data);
-                printf("%d:%d\n", textedit->cursor, (int)(chunk.data - source.data) + chunk.size);
-                if (textedit->cursor == (int)(chunk.data - source.data) + chunk.size
-                    && source.data[textedit->cursor] == '\n'
-                ) {
-                    //cursor_line -= 2;
-                    printf("mi\n");
-                    //chars_until_cursor_line = view_columns;
+            TextEditVisualLine_DynArr_insert(&textedit->visualblocks,
+                (TextEditVisualLine) {
+                    .start = chunk_start,
+                    .end   = b,
+                    .line = initial_scroll + line_counter,
+                    .wrap = wrap_counter
                 }
-                //printf("%d:%d\n", textedit->cursor, (int)(chunk.data - source.data));
-            }
-            ++first_try;
-            if (first_try > 1) ++k;
-            //printf("[%"PRIstr"]\n", PRIstrarg(chunk));
+            );
 
-            // Avoid printing a line containing just a newline.
-            final_line = chunk.data + chunk.size == line.data + line.size;
-            if (first_try>1 && final_line && chunk.size == 1 && chunk.data[0] == '\n') {
-                --k;
-                break;
-            }
+            chunk_start = b;
+            textOffsetX = 0;
+            ++wrap_counter;
+            continue;
+        }
+        ++textOffsetX;
+        ++b;
+    }
 
-            DrawTextEx_strview(
+    TextEditVisualLine visual_line = { 0 };
+    printf("%d ---\n", view_columns);
+    for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
+
+        visual_line = textedit->visualblocks.items[i];
+        if (0) {
+        printf("[%3d:%3d:%3d:%3d - %3d][%"PRIstr"]\n",
+            visual_line.start,
+            visual_line.end,
+            visual_line.line,
+            visual_line.wrap,
+            visual_line.end -
+            visual_line.start,
+            PRIstrarg(
+                strview_sub(source, visual_line.start,
+                                    visual_line.end)
+            )
+        );
+        }
+
+        textOffsetX = 0;
+        DrawTextEx_strview(
                 GUI.font,
-                (strview_t) {
-                    .data = chunk.data,
-                    .size = chunk.size + (final_line ? -1 : 0)
-                    // Last char is always new line or EOF (out of bounds).
+                strview_sub(source, visual_line.start,
+                                    visual_line.end),
+                (Vector2) {
+                    position.x + (float)textOffsetX * (GUI.font_width + spacing),
+                    position.y + (float)i * (fontSize + textLineSpacing)
                 },
-                (Vector2) {view_rect.x + number_padding,
-                view_rect.y + line_height * (float)k},
                 GUI.font_size,
                 GUI.font_spacing,
-                0,
-                BLACK
-            );
-
-        }
-        ++i;
+                line_spacing,
+                BLACK);
     }
-*/
+
+    } while(0);
 
     // draw cursor
 
-    //int screen_cursor = textedit->cursor - chars_until_cursor_line;
-    ////int screen_cursor = textedit->cursor -scroll *view_columns - cursor_line * view_columns;
+    printf("cursor %d cursor_line %d cursor_visual_line %d\n",
+        textedit->cursor, textedit->cursor_line, textedit->cursor_visual_line
+    );
 
-    //printf("cursor_line %d : cursor %d : chars_until %d : screeen_cursor %d\n",
-            //cursor_line, textedit->cursor, chars_until_cursor_line, screen_cursor);
+    if (textedit->cursor_visual_line >= 0) {
+        const TextEditVisualLine curr_line =
+            textedit->visualblocks.items[textedit->cursor_visual_line];
+        int view_cursor_x = textedit->cursor - curr_line.start;
+        int view_cursor_y = textedit->cursor_visual_line;
 
-    DrawRectangleRec((Rectangle) {
-        view_rect.x + number_padding +
-        (float)(view_cursor_x) * (GUI.font_width + GUI.font_spacing),
-        view_rect.y +
-        (float)(view_cursor_y) * (GUI.font_size + line_spacing),
-        2, GUI.font_size }, WHITE);
+        DrawRectangleRec((Rectangle) {
+            view_rect.x + number_padding +
+            (float)(view_cursor_x) * (GUI.font_width + GUI.font_spacing),
+            view_rect.y +
+            (float)(view_cursor_y) * (GUI.font_size + line_spacing),
+            2, GUI.font_size }, WHITE);
 
-    DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
+        DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
+    }
     EndTextureMode();
 
     // controls
@@ -1170,55 +937,18 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     }
     // mouse
     //if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    /*
-        do {
-        Vector2 mouse = GetMousePosition();
-        if (!CheckCollisionPointRec(mouse, view_rect.rect)) break;
-
-        // Given a screen position, where does it fall into the file?
-
-        int mouse_char_x =
-            (int)ceilf((mouse.x - view_rect.x - number_padding) /
-                    (GUI.font_width + GUI.font_spacing));
-        if (mouse_char_x <= 0) break;
-
-        int mouse_char_y = (int)floorf((mouse.y - view_rect.y) / line_height) + scroll;
-        //int mouse_char_y = (int)((mouse.y - view_rect.y) / line_height) + scroll;
-        if (mouse_char_y > textedit->line_amount) break;
-        if ((size_t)(mouse_char_y +1) >= textedit->linebreaks.size) break;
-
-        printf("I'm in boss %d:%d\n", mouse_char_x, mouse_char_y);
-
-        // NOTE: This won't work with wrapping.
-        uint line_size =
-            textedit->linebreaks.items[mouse_char_y +1] -
-            textedit->linebreaks.items[mouse_char_y];
-        textedit->cursor =
-            (int)textedit->linebreaks.items[mouse_char_y]
-            + int_min((int)line_size, mouse_char_x)
-            + (mouse_char_y == 0 && mouse_char_x != 0 ? -1 : 0)
-        ;
-
-        printf("line_size %d\n", line_size);
-        //for (size i = 0; i < textedit->linebreaks.
-
-
-        } while(0);
     //}
-    */
 
     // scroll to cursor
     
+    /*
     while (textedit->cursor_line < textedit->scroll) {
         --textedit->scroll;
     }
-    //while (textedit->cursor_line > textedit->scroll + (int)(view_rect.height / line_height)) {
-    //while (textedit->cursor_line > textedit->scroll + (line_counter -)) {
-    //while (textedit->cursor_line > textedit->scroll + line_counter +1) {
-
     while (textedit->cursor_line > textedit->scroll + (view_max_lines - wrapped_lines)) {
         ++textedit->scroll;
     }
+    */
     //while (textedit->cursor_line > textedit->scroll + (view_max_lines)) {
         //++textedit->scroll;
     //}
