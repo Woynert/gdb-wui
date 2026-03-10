@@ -103,6 +103,8 @@ typedef struct TextEdit {
     /* cached */
     int cursor_line;
     int cursor_visual_line;
+    int first_visual_line_wrap_levels;
+    int second_visual_line_wrap_levels;
 } TextEdit;
 
 void GUI_TextEdit_init(TextEdit *textedit) {
@@ -352,6 +354,7 @@ void GUI_TextEdit__update_linebreaks(TextEdit *textedit, int startindex) {
 void GUI_TextEdit_enable(TextEdit *textedit, strview_t initial_buffer) {
     textedit->enabled = true;
     textedit->cursor = 0;
+    textedit->scroll = 1;
     strbuf_assign(&textedit->buffer, initial_buffer);
     GUI_TextEdit__update_linebreaks(textedit, 0);
 }
@@ -562,22 +565,68 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
     // scrolling
 
+            const TextEditVisualLine first_line1 =
+        textedit->visualblocks.items[0 + textedit->first_visual_line_wrap_levels - textedit->wrap_scroll];
+            const TextEditVisualLine next_line1 =
+        textedit->visualblocks.items[1 + textedit->first_visual_line_wrap_levels - textedit->wrap_scroll];
+
+            printf("%d:%d -- %d:%d\n", first_line1.line, first_line1.wrap, next_line1.line, next_line1.wrap);
+            printf("[%"PRIstr"]\n", PRIstrarg(strview_sub(strview_of_buf(textedit->buffer), first_line1.start, first_line1.end)));
+            printf("[%"PRIstr"]\n", PRIstrarg(strview_sub(strview_of_buf(textedit->buffer), next_line1.start, next_line1.end)));
+
     if (GetMouseWheelMove() != 0) {
-        textedit->scroll -= GetMouseWheelMove() > 0 ? 1 : -1;
-        textedit->scroll =
-            int_max(0, int_min((int)textedit->line_amount, textedit->scroll));
+        int scroll_dir = GetMouseWheelMove() > 0 ? 1 : -1;
+
+        if (textedit->visualblocks.size > 1) {
+            
+            if (scroll_dir < 0) { // down
+
+            const TextEditVisualLine first_line = textedit->visualblocks.items[0 + textedit->wrap_scroll];
+            const TextEditVisualLine next_line = textedit->visualblocks.items[1 + textedit->wrap_scroll];
+
+            printf("%d:%d -- %d:%d\n", first_line.line, first_line.wrap, next_line.line, next_line.wrap);
+            printf("[%"PRIstr"]\n", PRIstrarg(strview_sub(strview_of_buf(textedit->buffer), first_line.start, first_line.end)));
+            printf("[%"PRIstr"]\n", PRIstrarg(strview_sub(strview_of_buf(textedit->buffer), next_line.start, next_line.end)));
+
+            if (textedit->wrap_scroll > 0) {
+                --textedit->wrap_scroll;
+            } else if (textedit->scroll < textedit->line_amount) {
+                ++textedit->scroll;
+                textedit->wrap_scroll = textedit->second_visual_line_wrap_levels;
+            }
+
+            } else { // up
+
+            const TextEditVisualLine first_line =
+        textedit->visualblocks.items[0 + textedit->first_visual_line_wrap_levels - textedit->wrap_scroll];
+            const TextEditVisualLine next_line =
+        textedit->visualblocks.items[1 + textedit->first_visual_line_wrap_levels - textedit->wrap_scroll];
+
+            printf("%d:%d -- %d:%d\n", first_line.line, first_line.wrap, next_line.line, next_line.wrap);
+            printf("[%"PRIstr"]\n", PRIstrarg(strview_sub(strview_of_buf(textedit->buffer), first_line.start, first_line.end)));
+            printf("[%"PRIstr"]\n", PRIstrarg(strview_sub(strview_of_buf(textedit->buffer), next_line.start, next_line.end)));
+
+                if (first_line.wrap == 0 && textedit->scroll > 1) {
+                    textedit->wrap_scroll = 0;
+                    --textedit->scroll;
+                } else if (textedit->wrap_scroll < textedit->first_visual_line_wrap_levels) {
+                    ++textedit->wrap_scroll;
+                }
+
+            }
+        }
 
         // keep cursor on view
+        /*
         if (textedit->cursor_line < textedit->scroll) {
             GUI_TextEdit__cursor_down(textedit, view_columns);
-            //++textedit->cursor_line;
         }
         if (textedit->cursor_line > textedit->scroll
                 + (int)(view_rect.height / line_height)
         ) {
             GUI_TextEdit__cursor_up(textedit, view_columns);
-            //--textedit->cursor_line;
         }
+        */
     }
 
     /*
@@ -723,6 +772,8 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     int wrap_counter = 0;
     textOffsetX = 0;
     textedit->cursor_visual_line = -1;
+    textedit->first_visual_line_wrap_levels = 0;
+    textedit->second_visual_line_wrap_levels = 0;
 
     // TODO: update only on certain events
 
@@ -757,6 +808,12 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             if ((textedit->cursor_line == (initial_scroll + line_counter))
              && (textedit->cursor >= chunk_start)) {
                 textedit->cursor_visual_line = (int)textedit->visualblocks.size;
+            }
+
+            if (line_counter == 0) {
+                ++textedit->first_visual_line_wrap_levels;
+            } else if (line_counter == 1) {
+                ++textedit->second_visual_line_wrap_levels;
             }
 
             TextEditVisualLine_DynArr_insert(&textedit->visualblocks,
@@ -797,6 +854,20 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         );
         }
 
+        if (i == 0) {
+            DrawRectangleLinesEx((Rectangle) {
+                position.x + (float)0 * (GUI.font_width + spacing),
+                position.y + (float)(1 + textedit->first_visual_line_wrap_levels  - textedit->wrap_scroll) * (fontSize + textLineSpacing),
+                300,
+                GUI.font_size
+            }, 1, RED);
+            DrawRectangleLinesEx((Rectangle) {
+                1 +position.x + (float)0 * (GUI.font_width + spacing),
+                1 +position.y + (float)(i + textedit->first_visual_line_wrap_levels + 1) * (fontSize + textLineSpacing),
+                300,
+                GUI.font_size * 10
+            }, 1, GREEN);
+        }
         textOffsetX = 0;
         DrawTextEx_strview(
                 GUI.font,
@@ -804,7 +875,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
                                     visual_line.end),
                 (Vector2) {
                     position.x + (float)textOffsetX * (GUI.font_width + spacing),
-                    position.y + (float)i * (fontSize + textLineSpacing)
+                    position.y + (float)(i - textedit->first_visual_line_wrap_levels + textedit->wrap_scroll) * (fontSize + textLineSpacing)
                 },
                 GUI.font_size,
                 GUI.font_spacing,
@@ -816,15 +887,18 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
     // draw cursor
 
-    printf("cursor %d cursor_line %d cursor_visual_line %d\n",
-        textedit->cursor, textedit->cursor_line, textedit->cursor_visual_line
+    printf("cursor %d cursor_line %d cursor_visual_line %d scroll %d scroll_wrap %d wrap_levels %d wrap_levels_2 %d\n",
+        textedit->cursor, textedit->cursor_line, textedit->cursor_visual_line,
+        textedit->scroll, textedit->wrap_scroll,
+        textedit->first_visual_line_wrap_levels,
+        textedit->second_visual_line_wrap_levels
     );
 
     if (textedit->cursor_visual_line >= 0) {
         const TextEditVisualLine curr_line =
             textedit->visualblocks.items[textedit->cursor_visual_line];
         int view_cursor_x = textedit->cursor - curr_line.start;
-        int view_cursor_y = textedit->cursor_visual_line;
+        int view_cursor_y = textedit->cursor_visual_line  - textedit->first_visual_line_wrap_levels + textedit->wrap_scroll;
 
         DrawRectangleRec((Rectangle) {
             view_rect.x + number_padding +
@@ -833,8 +907,8 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             (float)(view_cursor_y) * (GUI.font_size + line_spacing),
             2, GUI.font_size }, WHITE);
 
-        DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
     }
+    //DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
     EndTextureMode();
 
     // controls
