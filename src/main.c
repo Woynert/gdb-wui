@@ -165,13 +165,25 @@ int main (void) {
     const int screenWidth = 400;
     const int screenHeight = 400;
     InitWindow(screenWidth, screenHeight, "WUI");
-    SetTargetFPS(60);
+    SetTargetFPS(30);
     GUI_init_global_context();
 
     GUI_TextEdit_enable(&GUI.textedit, cstr(
-        "#include \"stdio.h\"\n"
-        "#include \"stdlibbbb.h\"\n"
-        "#include \"math.h\"\n"
+        /*"#include \"stdio.h\"\n"*/
+        /*"#include \"stdlibbbb.h\"\n"*/
+        "[123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.]\n"
+        "1\n"
+        "#include \"math.hhhhh\""
+        "#include \"math.h\".123.123.123.123.123.123.123.123\n"
+        "#include \"math.hhhhh1\"\n"
+        "#include \"math.hhhh2\"\n"
+        "\n"
+        "\n"
+        "#include \"math.hhhh3\"\n"
+        "#include \"math.hhhh4\"\n"
+        "#include \"math.hhhh5\"\n"
+        "#include \"math.hhhh6\"\n"
+        /*"#include \"hello.world.hello.world.hello.world.hello.world\"\n"*/
         "\n"
         "int main(void)\n"
         "{\n"
