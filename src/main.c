@@ -162,8 +162,8 @@ int main (void) {
 
 
     // Raylib stuff
-    const int screenWidth = 400;
-    const int screenHeight = 400;
+    const int screenWidth = 600;
+    const int screenHeight = 600;
     InitWindow(screenWidth, screenHeight, "WUI");
     SetTargetFPS(30);
     GUI_init_global_context();
