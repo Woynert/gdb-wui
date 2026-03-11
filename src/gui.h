@@ -383,9 +383,11 @@ void GUI_TextEdit__scroll_down(TextEdit *textedit) {
         ];
         if (next_line.line == textedit->scroll) {
             ++textedit->wrap_scroll;
+            ++textedit->visualline_corresponding_to_scroll;
         } else if (textedit->scroll < textedit->line_amount -1) {
             textedit->wrap_scroll = 0;
             ++textedit->scroll;
+            ++textedit->visualline_corresponding_to_scroll;
         }
     }
 }
@@ -399,8 +401,10 @@ void GUI_TextEdit__scroll_up(TextEdit *textedit) {
         ];
         if (textedit->wrap_scroll > 0) {
             --textedit->wrap_scroll;
+            --textedit->visualline_corresponding_to_scroll;
         } else if (textedit->scroll > 0) {
             --textedit->scroll;
+            --textedit->visualline_corresponding_to_scroll;
             textedit->wrap_scroll = prev_line.wrap;
         }
     }
@@ -673,6 +677,19 @@ void GUI_TextEdit__find_cursor_visual_line(TextEdit *textedit) {
     }
 }
 
+/* NOTE: Maybe merge with above function? */
+void GUI_TextEdit__find_visualline_corresponding_to_scroll(TextEdit *textedit) {
+    textedit->visualline_corresponding_to_scroll = -1;
+    for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
+        TextEditVisualLine visual_line = textedit->visualblocks.items[i];
+        if (visual_line.line == textedit->scroll) {
+            textedit->visualline_corresponding_to_scroll = i;
+            break;
+        }
+    }
+}
+
+/*
 void GUI_TextEdit__debug_print_last_first_lines(TextEdit *textedit, int view_max_lines) {
     int first_line_index = int_max(
         0,
@@ -697,6 +714,7 @@ void GUI_TextEdit__debug_print_last_first_lines(TextEdit *textedit, int view_max
         )
     );
 }
+*/
 
 void GUI_TextEdit__debug_draw(TextEdit *textedit, Vector2 pos, int view_max_lines) {
     float line_spacing = 2;
@@ -778,14 +796,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
     /* Find visualline_corresponding_to_scroll */
 
-    textedit->visualline_corresponding_to_scroll = -1;
-    for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
-        visual_line = textedit->visualblocks.items[i];
-        if (visual_line.line == textedit->scroll) {
-            textedit->visualline_corresponding_to_scroll = i;
-            break;
-        }
-    }
+    GUI_TextEdit__find_visualline_corresponding_to_scroll(textedit);
     visualline_start = textedit->visualline_corresponding_to_scroll
                      + textedit->wrap_scroll;
 
@@ -1042,63 +1053,28 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     //}
 
     // scroll to cursor
-    
-    /*
-    while (textedit->cursor_line < textedit->scroll) {
-        --textedit->scroll;
-    }
-    while (textedit->cursor_line > textedit->scroll + (view_max_lines - wrapped_lines)) {
-        ++textedit->scroll;
-    }
-    */
-    //while (textedit->cursor_line > textedit->scroll + (view_max_lines)) {
-        //++textedit->scroll;
-    //}
-    
-    //textedit->cursor_line = cursor_line;
-
     if (textedit->gofocus_cursor) {
         textedit->gofocus_cursor = false;
-        return;
 
-        /* Should never happen */
-        if (textedit->cursor < 0 || textedit->cursor >= textedit->buffer->size)
-        {
-            textedit->cursor = 0;
-        }
-
-        // TODO: DO NOTHING IF CURSOR IS VISIBLE
+        // Do nothing if cursor is visible.
 
         GUI_TextEdit__find_cursor_visual_line(textedit);
         int first_line_index = int_max(
             0,
-            textedit->first_visual_line_wrap_levels - textedit->wrap_scroll
+            textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll
         );
         int last_line_index = int_min(
             (int)textedit->visualblocks.size -1,
-            first_line_index + view_max_lines
+            textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll
+            + view_max_lines
         );
 
         if (textedit->cursor_visual_line >= first_line_index
             && textedit->cursor_visual_line <= last_line_index) {
-            printf("NOTHING EVER HAPPENS :)))\n");
-            printf("NOTHING EVER HAPPENS :)))\n");
-            printf("NOTHING EVER HAPPENS :)))\n");
-            printf("NOTHING EVER HAPPENS :)))\n");
-            printf("NOTHING EVER HAPPENS :)))\n");
             return;
         }
 
-        /*
-         * Force set scroll to cursor_real_line;
-         * Set wrap_scroll to 0;
-         * Rebuild visual blocks;
-         * Depending on whether the cursor was down or up the original view then
-         *   we scroll to make sure the cursor is touching the border (bottom or
-         *   top);
-         */
-
-        // Get cursor line.
+        // Get cursor line + direction
 
         int cursor_line = -1;
         for (size_t i = 0; i < textedit->linebreaks.size; ++i) {
@@ -1107,77 +1083,40 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             } else { break; }
         }
         ++cursor_line;
-        
-        // Get direction.
 
         TextEditVisualLine line = textedit->visualblocks.items[first_line_index];
         int dir = textedit->cursor > line.start ? 1 : -1;
 
-        // Set scroll.
+        // Rebuild.
 
-        textedit->scroll = cursor_line +1;
+        textedit->scroll = cursor_line;
         textedit->wrap_scroll = 0;
 
-        // Rebuild.
-        
-        //GUI_TextEdit__build_visual_lines(textedit, view_columns, view_max_lines);
         GUI_TextEdit__build_visual_lines(
-            textedit, view_columns, textedit->scroll, view_max_lines);
+            textedit, view_columns,
+            textedit->scroll - view_max_lines,
+            view_max_lines * 2
+        );
         GUI_TextEdit__find_cursor_visual_line(textedit);
+        GUI_TextEdit__find_visualline_corresponding_to_scroll(textedit);
 
-        // Scroll.
-
-        //if (cursor_line == 0) {
-            textedit->wrap_scroll = textedit->first_visual_line_wrap_levels;
-            //textedit->wrap_scroll = textedit->second_visual_line_wrap_levels;
-        //}
-        //textedit->wrap_scroll = textedit->first_visual_line_wrap_levels;
-            //textedit->wrap_scroll = textedit->second_visual_line_wrap_levels;
-
-        // DEBUG: Print exact line start and exact line end.
+        // Scroll until visible.
 
         first_line_index = int_max(
             0,
-            textedit->first_visual_line_wrap_levels - textedit->wrap_scroll
+            textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll
         );
-        last_line_index = int_min(
-            (int)textedit->visualblocks.size -1,
-            first_line_index + view_max_lines
-        );
-        printf("Line diff: %d.\n",
-            dir > 0 ? last_line_index - textedit->cursor_visual_line
-                    : textedit->cursor_visual_line - first_line_index
-        );
+        last_line_index = first_line_index + view_max_lines;
+        // Warning: ^ Do not use to index, it's not capped.
 
         int lines_to_scroll =
             dir > 0 ? last_line_index - textedit->cursor_visual_line
                     : textedit->cursor_visual_line - first_line_index;
 
-        if (dir > 0) {
-            GUI_TextEdit__build_visual_lines(
-                textedit, view_columns,
-                textedit->scroll - view_max_lines,
-                view_max_lines * 2
-            );
-        }
-
-        GUI_TextEdit__debug_print_last_first_lines(textedit, view_max_lines);
-
         for (int i = 0; i < lines_to_scroll; ++i) {
-            if (dir > 0) {
-                GUI_TextEdit__scroll_up(textedit);
-                //GUI_TextEdit__build_visual_lines(textedit, view_columns, view_max_lines);
-                /*
-                 * Note: To avoid rebuilding everytime we scroll up implement
-                 * a function to rebuild only certain range of lines, so that we
-                 * can rebuild from [scroll - view_max_lines to scroll] once.
-                 */
-            } else {
-                GUI_TextEdit__scroll_down(textedit);
-            }
+            if (dir > 0) { GUI_TextEdit__scroll_up(textedit); }
+            else         { GUI_TextEdit__scroll_down(textedit); }
         }
-
-        GUI_TextEdit__debug_print_last_first_lines(textedit, view_max_lines);
     }
 }
 
