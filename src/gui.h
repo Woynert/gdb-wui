@@ -105,7 +105,7 @@ typedef struct TextEdit {
     int first_visual_line_wrap_levels;
     int second_visual_line_wrap_levels;
     bool gofocus_cursor;
-    int visualline_corresponding_to_scroll;
+    int visualline_corresponding_to_scroll; // Matches a real line.
 } TextEdit;
 
 void GUI_TextEdit_init(TextEdit *textedit) {
@@ -383,11 +383,10 @@ void GUI_TextEdit__scroll_down(TextEdit *textedit) {
         ];
         if (next_line.line == textedit->scroll) {
             ++textedit->wrap_scroll;
-            ++textedit->visualline_corresponding_to_scroll;
         } else if (textedit->scroll < textedit->line_amount -1) {
+            textedit->visualline_corresponding_to_scroll += textedit->wrap_scroll +1;
             textedit->wrap_scroll = 0;
             ++textedit->scroll;
-            ++textedit->visualline_corresponding_to_scroll;
         }
     }
 }
@@ -401,10 +400,9 @@ void GUI_TextEdit__scroll_up(TextEdit *textedit) {
         ];
         if (textedit->wrap_scroll > 0) {
             --textedit->wrap_scroll;
-            --textedit->visualline_corresponding_to_scroll;
         } else if (textedit->scroll > 0) {
             --textedit->scroll;
-            --textedit->visualline_corresponding_to_scroll;
+            textedit->visualline_corresponding_to_scroll -= prev_line.wrap +1;
             textedit->wrap_scroll = prev_line.wrap;
         }
     }
@@ -521,6 +519,8 @@ void GUI_TextEdit__apply_change(
         textedit->cursor = change->start;
     }
     GUI_TextEdit__update_linebreaks(textedit, 0);
+
+    textedit->gofocus_cursor = true;
 }
 
 void GUI_TextEdit__insert(TextEdit *textedit, int start, strview_t str) {
@@ -681,8 +681,7 @@ void GUI_TextEdit__find_cursor_visual_line(TextEdit *textedit) {
 void GUI_TextEdit__find_visualline_corresponding_to_scroll(TextEdit *textedit) {
     textedit->visualline_corresponding_to_scroll = -1;
     for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
-        TextEditVisualLine visual_line = textedit->visualblocks.items[i];
-        if (visual_line.line == textedit->scroll) {
+        if (textedit->visualblocks.items[i].line == textedit->scroll) {
             textedit->visualline_corresponding_to_scroll = i;
             break;
         }
@@ -1108,14 +1107,21 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         );
         last_line_index = first_line_index + view_max_lines;
         // Warning: ^ Do not use to index, it's not capped.
+        //if (dir <= 0) return;
 
         int lines_to_scroll =
             dir > 0 ? last_line_index - textedit->cursor_visual_line
                     : textedit->cursor_visual_line - first_line_index;
 
-        for (int i = 0; i < lines_to_scroll; ++i) {
-            if (dir > 0) { GUI_TextEdit__scroll_up(textedit); }
-            else         { GUI_TextEdit__scroll_down(textedit); }
+        for (int i = 0; i < abs(lines_to_scroll); ++i) {
+            if (dir > 0) {
+                if (lines_to_scroll > 0) { GUI_TextEdit__scroll_up(textedit);
+                } else { GUI_TextEdit__scroll_down(textedit); }
+            }
+            else {
+                if (lines_to_scroll > 0) { GUI_TextEdit__scroll_down(textedit);
+                } else { GUI_TextEdit__scroll_up(textedit); }
+            }
         }
     }
 }
