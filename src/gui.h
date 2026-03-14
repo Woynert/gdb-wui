@@ -919,12 +919,12 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
     // draw cursor
 
-    printf("cursor %d cursor_visual_line %d scroll %d scroll_wrap %d wrap_levels %d wrap_levels_2 %d\n",
-        textedit->cursor, textedit->cursor_visual_line,
-        textedit->scroll, textedit->wrap_scroll,
-        textedit->first_visual_line_wrap_levels,
-        textedit->second_visual_line_wrap_levels
-    );
+    //printf("cursor %d cursor_visual_line %d scroll %d scroll_wrap %d wrap_levels %d wrap_levels_2 %d\n",
+        //textedit->cursor, textedit->cursor_visual_line,
+        //textedit->scroll, textedit->wrap_scroll,
+        //textedit->first_visual_line_wrap_levels,
+        //textedit->second_visual_line_wrap_levels
+    //);
 
     if (textedit->cursor_visual_line >= 0) {
         const TextEditVisualLine curr_line =
@@ -1048,8 +1048,38 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         }
     }
     // mouse
-    //if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    //}
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        do {
+            Vector2 mouse_pos = GetMousePosition();
+            float char_width = GUI.font_width + GUI.font_spacing;
+            float mouse_x = mouse_pos.x - (view_rect.x + number_padding - char_width/2.f);
+            float mouse_y = mouse_pos.y - (view_rect.y);
+            int mouse_x_char = (int)floorf(mouse_x / char_width);
+            int mouse_y_char = (int)floorf(mouse_y / line_height);
+            printf("mouse x %d y %d\n", mouse_x_char, mouse_y_char);
+
+            if (mouse_y_char < 0 || mouse_y_char > view_max_lines
+                || mouse_x_char < 0 || mouse_x_char > view_columns) {
+                break;
+            }
+
+            int line_index = 
+                textedit->visualline_corresponding_to_scroll
+                + textedit->wrap_scroll
+                + mouse_y_char;
+            line_index = int_clamp(0, (int)textedit->visualblocks.size-1, line_index);
+            TextEditVisualLine line = textedit->visualblocks.items[line_index];
+            printf("Line [%"PRIstr"]\n", PRIstrarg(strview_sub(
+                strview_of_buf(textedit->buffer), line.start, line.end
+            )));
+
+            textedit->cursor = int_max(0, int_min(
+                line.end -1,
+                line.start + mouse_x_char
+            ));
+
+        } while (0);
+    }
 
     // scroll to cursor
     if (textedit->gofocus_cursor) {
@@ -1107,7 +1137,6 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         );
         last_line_index = first_line_index + view_max_lines;
         // Warning: ^ Do not use to index, it's not capped.
-        //if (dir <= 0) return;
 
         int lines_to_scroll =
             dir > 0 ? last_line_index - textedit->cursor_visual_line
