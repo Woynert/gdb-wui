@@ -106,6 +106,7 @@ typedef struct TextEdit {
     int second_visual_line_wrap_levels;
     bool gofocus_cursor;
     int visualline_corresponding_to_scroll; // Matches a real line.
+    double cursor_blink_timestamp_secs;
 } TextEdit;
 
 void GUI_TextEdit_init(TextEdit *textedit) {
@@ -715,6 +716,10 @@ void GUI_TextEdit__debug_print_last_first_lines(TextEdit *textedit, int view_max
 }
 */
 
+void GUI_TextEdit__reset_cursor_blink(TextEdit *textedit) {
+    textedit->cursor_blink_timestamp_secs = GetTime();
+}
+
 void GUI_TextEdit__debug_draw(TextEdit *textedit, Vector2 pos, int view_max_lines) {
     float line_spacing = 2;
     float line_height = GUI.font_size + line_spacing;
@@ -917,8 +922,6 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             GUI.font_size, GUI.font_spacing, line_spacing, BLACK);
     }
 
-    // draw cursor
-
     //printf("cursor %d cursor_visual_line %d scroll %d scroll_wrap %d wrap_levels %d wrap_levels_2 %d\n",
         //textedit->cursor, textedit->cursor_visual_line,
         //textedit->scroll, textedit->wrap_scroll,
@@ -926,7 +929,12 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         //textedit->second_visual_line_wrap_levels
     //);
 
-    if (textedit->cursor_visual_line >= 0) {
+    /* Draw cursor + blink */
+
+    double time_since = GetTime() - textedit->cursor_blink_timestamp_secs;
+    if (time_since > 1) { GUI_TextEdit__reset_cursor_blink(textedit); }
+
+    if (textedit->cursor_visual_line >= 0 && time_since <= 0.8) {
         const TextEditVisualLine curr_line =
             textedit->visualblocks.items[textedit->cursor_visual_line];
         int view_cursor_x = textedit->cursor - curr_line.start;
@@ -934,10 +942,10 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
         DrawRectangleRec((Rectangle) {
             view_rect.x + number_padding +
-            (float)(view_cursor_x) * (GUI.font_width + GUI.font_spacing),
+            (float)(view_cursor_x) * (GUI.font_width + GUI.font_spacing) -1,
             view_rect.y +
-            (float)(view_cursor_y) * (GUI.font_size + line_spacing),
-            2, GUI.font_size }, WHITE);
+            (float)(view_cursor_y) * (GUI.font_size + line_spacing) -2,
+            2, GUI.font_size +4 }, WHITE);
 
     }
     DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
@@ -1078,12 +1086,16 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
                 line.start + mouse_x_char
             ));
 
+            GUI_TextEdit__reset_cursor_blink(textedit);
+
         } while (0);
     }
 
     // scroll to cursor
     if (textedit->gofocus_cursor) {
         textedit->gofocus_cursor = false;
+
+        GUI_TextEdit__reset_cursor_blink(textedit);
 
         // Do nothing if cursor is visible.
 
