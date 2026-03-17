@@ -4,6 +4,7 @@
 #include "stdio.h"   // printf
 #include "stdbool.h" // true
 #include "stdlib.h"  // exit
+#include "limits.h"
 #include "math.h"
 
 static inline size_t size_t_max(size_t a, size_t b) { return a > b ? a : b; }
@@ -16,6 +17,24 @@ static inline int int_clamp(int min, int max, int value) {
     return int_max(min, int_min(max, value)); }
 static inline float float_clamp(float min, float max, float value) {
     return fmaxf(min, fminf(max, value)); }
+
+// Source - https://stackoverflow.com/a/1068937
+int int_digit_places (int n) {
+    if (n < 0) n = (n == INT_MIN) ? INT_MAX : -n;
+    if (n < 10) return 1;
+    if (n < 100) return 2;
+    if (n < 1000) return 3;
+    if (n < 10000) return 4;
+    if (n < 100000) return 5;
+    if (n < 1000000) return 6;
+    if (n < 10000000) return 7;
+    if (n < 100000000) return 8;
+    if (n < 1000000000) return 9;
+    /*      2147483647 is 2^31-1 - add more ifs as needed
+       and adjust this final return as well. */
+    return 10;
+}
+
 
 #ifdef WIN32
 #include <windows.h>

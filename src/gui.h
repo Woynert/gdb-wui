@@ -752,11 +752,10 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
 
     float line_spacing = 2;
     float line_height = GUI.font_size + line_spacing;
-    float number_padding = fmaxf(3, (GUI.font_width + GUI.font_spacing)
-        * (ceilf(((float)textedit->line_amount +1) / 10.f) +1));
-    //int view_columns = (int)floorf((view_rect.width - number_padding) /
-                    //(GUI.font_width + GUI.font_spacing)) -2;
-    int view_columns = 21;
+    float number_padding = (float)(int_digit_places(textedit->line_amount) +1)
+        * (GUI.font_width + GUI.font_spacing);
+    int view_columns = (int)floorf((view_rect.width - number_padding) /
+                    (GUI.font_width + GUI.font_spacing));
 
     // scrolling
 
@@ -774,11 +773,8 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
      * Some of these variables only need to be updated on cursor change
      */
 
-    // static strbuf_space_t(16) _aux_str = STRBUF_STATIC_INIT(16);
-    // strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
 
     strview_t source = strview_of_buf(textedit->buffer);
-    Vector2 position = (Vector2){ view_rect.pos.x + number_padding, view_rect.pos.y };
     float fontSize = GUI.font_size;
     float textLineSpacing = line_spacing;
     TextEditVisualLine visual_line = { 0 };
@@ -903,6 +899,9 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     }
     } while(0);
 
+    static strbuf_space_t(16) _aux_str = STRBUF_STATIC_INIT(16);
+    strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
+
     // draw buffer
 
     int visualline_end   = visualline_start + view_max_lines;
@@ -916,8 +915,23 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             strview_sub(source, visual_line.start,
                                 visual_line.end),
             (Vector2) {
-                position.x,
-                position.y + (float)(i - visualline_start) * (fontSize + textLineSpacing)
+                view_rect.x + number_padding,
+                view_rect.y + (float)(i - visualline_start) * (fontSize + textLineSpacing)
+            },
+            GUI.font_size, GUI.font_spacing, line_spacing, BLACK);
+
+        if (visual_line.wrap != 0) continue;
+
+        // draw numbers
+
+        strbuf_printf(&aux_str, "%d", visual_line.line);
+
+        DrawTextEx_strview(
+            GUI.font,
+            strview_of_buf(aux_str),
+            (Vector2) {
+                view_rect.x,
+                view_rect.y + (float)(i - visualline_start) * (fontSize + textLineSpacing)
             },
             GUI.font_size, GUI.font_spacing, line_spacing, BLACK);
     }
