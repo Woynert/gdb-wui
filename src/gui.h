@@ -517,7 +517,7 @@ void GUI_TextEdit__apply_change(
     if (undo ^ change->is_insert) {
         strbuf_insert_at_index(
             &textedit->buffer, change->start, strview_of_buf(change->buffer));
-        textedit->cursor += change->buffer->size;
+        textedit->cursor = change->start + change->buffer->size;
     } else {
         strbuf_pop_at_index(
                 &textedit->buffer, change->start, change->buffer->size);
