@@ -107,6 +107,7 @@ typedef struct TextEdit {
     bool gofocus_cursor;
     int visualline_corresponding_to_scroll; // Matches a real line.
     double cursor_blink_timestamp_secs;
+    bool must_rebuild_visual_blocks;
 } TextEdit;
 
 void GUI_TextEdit_init(TextEdit *textedit) {
@@ -357,6 +358,7 @@ void GUI_TextEdit_enable(TextEdit *textedit, strview_t initial_buffer) {
     textedit->enabled = true;
     textedit->cursor = 0;
     textedit->scroll = 0;
+    textedit->must_rebuild_visual_blocks = true;
     strbuf_assign(&textedit->buffer, initial_buffer);
     GUI_TextEdit__update_linebreaks(textedit, 0);
 }
@@ -390,6 +392,7 @@ void GUI_TextEdit__scroll_down(TextEdit *textedit) {
             ++textedit->scroll;
         }
     }
+    textedit->must_rebuild_visual_blocks = true;
 }
 
 void GUI_TextEdit__scroll_up(TextEdit *textedit) {
@@ -407,6 +410,7 @@ void GUI_TextEdit__scroll_up(TextEdit *textedit) {
             textedit->wrap_scroll = prev_line.wrap;
         }
     }
+    textedit->must_rebuild_visual_blocks = true;
 }
 
 void GUI_TextEdit__cursor_down(TextEdit *textedit, int view_columns) {
@@ -520,7 +524,7 @@ void GUI_TextEdit__apply_change(
         textedit->cursor = change->start;
     }
     GUI_TextEdit__update_linebreaks(textedit, 0);
-
+    textedit->must_rebuild_visual_blocks = true;
     textedit->gofocus_cursor = true;
 }
 
@@ -597,10 +601,7 @@ void GUI_TextEdit__build_visual_lines(
     if (from_real_line >= (int)(textedit->linebreaks.size-1)) { return; }
 
     strview_t source = strview_of_buf(textedit->buffer);
-    strview_t line = source;
-    strview_t string = line;
-
-    TextEditVisualLine_DynArr_clear_preserving_capacity(&textedit->visualblocks);
+    strview_t string = source;
 
     int initial_scroll = int_max(0, from_real_line -1);
     int b = textedit->linebreaks.items[initial_scroll] +1; // byte
@@ -608,6 +609,8 @@ void GUI_TextEdit__build_visual_lines(
     int line_counter = 0;
     int wrap_counter = 0;
     int textOffsetX = 0;
+
+    TextEditVisualLine_DynArr_clear_preserving_capacity(&textedit->visualblocks);
 
     textedit->first_visual_line_wrap_levels = 0;
     textedit->second_visual_line_wrap_levels = 0;
@@ -773,7 +776,6 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
      * Some of these variables only need to be updated on cursor change
      */
 
-
     strview_t source = strview_of_buf(textedit->buffer);
     float fontSize = GUI.font_size;
     float textLineSpacing = line_spacing;
@@ -782,11 +784,14 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
     // TODO: update only on certain events
 
     int view_max_lines = (int)floorf(view_rect.height / line_height);
-    GUI_TextEdit__build_visual_lines(
-        textedit, view_columns,
-        textedit->scroll - view_max_lines,
-        view_max_lines * 2 + 2
-    );
+    if (textedit->must_rebuild_visual_blocks) {
+        textedit->must_rebuild_visual_blocks = false;
+        GUI_TextEdit__build_visual_lines(
+            textedit, view_columns,
+            textedit->scroll - view_max_lines,
+            view_max_lines * 2 + 2
+        );
+    }
     int visualline_start = textedit->visualline_corresponding_to_scroll
                      + textedit->wrap_scroll;
 
@@ -1048,7 +1053,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
         GUI_TextEdit__copy_selection(textedit);
     }
 
-    // undo & redo
+    // redo
     if (control && shift && IsKeyPressed(KEY_Z)) {
         TextEdit_Change *change = TextEditRing_get_from_head(
                 &textedit->editlog.ring,
@@ -1059,6 +1064,7 @@ void GUI_TextEdit_draw(TextEdit *textedit, Rect2 view_rect) {
             textedit->is_selecting = false;
         }
     }
+    // undo
     else if (control && IsKeyPressed(KEY_Z)) {
         TextEdit_Change *change = TextEditRing_get_from_head(
                 &textedit->editlog.ring,
