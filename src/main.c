@@ -168,7 +168,7 @@ int main (void) {
     SetTargetFPS(30);
     GUI_init_global_context();
 
-    GUI_TextEdit_enable(&GUI.textedit, cstr(
+    textedit_enable(&GUI.textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
         "[123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.]\n"

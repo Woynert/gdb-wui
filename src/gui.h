@@ -81,7 +81,7 @@ void GUI_init_global_context(void) {
     GUI.aux_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     GUI.final_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
-    GUI_TextEdit_init(&GUI.textedit);
+    textedit_init(&GUI.textedit);
 
     //LoadFont
     GUI.font_spacing = 1;
@@ -271,7 +271,7 @@ void GUI_draw_all(WuiState *state) {
 
     /*
     view_rect = (Rect2) {{ 150, 150, 187, 150 }};
-    GUI_TextEdit_draw(&GUI.textedit, view_rect);
+    textedit_draw(&GUI.textedit, view_rect);
     BeginTextureMode(GUI.final_texture);
         DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
     EndTextureMode();
@@ -294,7 +294,7 @@ void GUI_draw_all(WuiState *state) {
         GUI_draw_popups();
 
         view_rect = (Rect2) {{ 150, 150, 187, 150 }};
-        GUI_TextEdit_draw(&GUI.textedit, view_rect, GUI.font, GUI.font_size,
+        textedit_draw(&GUI.textedit, view_rect, GUI.font, GUI.font_size,
                 GUI.font_spacing, GUI.font_width);
 
     EndDrawing();
