@@ -71,7 +71,7 @@ struct {
         };
     } context_menu;
 
-    TextEdit textedit;
+    Textedit textedit;
 } GUI;
 
 void GUI_init_global_context(void) {

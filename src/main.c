@@ -168,6 +168,7 @@ int main (void) {
     SetTargetFPS(30);
     GUI_init_global_context();
 
+    textedit_toggle_line_numbers(&GUI.textedit, true);
     textedit_enable(&GUI.textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
