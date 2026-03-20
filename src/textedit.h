@@ -83,6 +83,7 @@ typedef struct Textedit {
     double cursor_blink_timestamp_secs;
     bool must_rebuild_visual_blocks;
     bool show_line_numbers;
+    bool editable;
 } Textedit;
 
 void textedit_init(Textedit *textedit) {
@@ -129,6 +130,10 @@ void textedit_disable(Textedit *textedit) {
 
 void textedit_toggle_line_numbers(Textedit *textedit, bool value) {
     textedit->show_line_numbers = value;
+}
+
+void textedit_set_editable(Textedit *textedit, bool value) {
+    textedit->editable = value;
 }
 
 // void textedit_get_buffer(Textedit *textedit) { }
@@ -726,7 +731,9 @@ void textedit_draw(
     double time_since = GetTime() - textedit->cursor_blink_timestamp_secs;
     if (time_since > 1) { textedit__reset_cursor_blink(textedit); }
 
-    if (textedit->cursor_visual_line >= 0 && time_since <= 0.8) {
+    if ((textedit->cursor_visual_line >= 0 && time_since <= 0.8) || 
+        (!textedit->editable)
+    ) {
         const TexteditVisualLine curr_line =
             textedit->visualblocks.items[textedit->cursor_visual_line];
         int view_cursor_x = textedit->cursor - curr_line.start;
@@ -750,107 +757,110 @@ void textedit_draw(
 
     // controls
 
-    bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    if (textedit->editable) {
+        bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
-    if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
-        textedit__update_selection(textedit, shift);
-        if (control) { textedit__move_by_world(textedit, -1); }
-        else { --textedit->cursor; }
-        textedit->gofocus_cursor = true;
-    }
-
-    if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
-    ) {
-        textedit__update_selection(textedit, shift);
-        if (control) { textedit__move_by_world(textedit, +1); }
-        else { ++textedit->cursor; }
-        textedit->gofocus_cursor = true;
-    }
-
-    if (IsKeyPressed(KEY_DOWN)
-    ) {
-        textedit__update_selection(textedit, shift);
-        textedit__cursor_down(textedit, view_columns);
-        textedit->gofocus_cursor = true;
-    }
-
-    if (IsKeyPressed(KEY_UP)) {
-        textedit__update_selection(textedit, shift);
-        textedit__cursor_up(textedit, view_columns);
-        textedit->gofocus_cursor = true;
-    }
-
-    if (IsKeyPressed(KEY_BACKSPACE)) {
-        if (textedit->is_selecting) {
-            textedit__delete_selection(textedit);
-        } else if (textedit->cursor > 0) {
-            textedit__delete_chunk(textedit, textedit->cursor-1, 1);
-        }
-    }
-
-    char new_char[2] = { '\0', '\0' };
-    int codepoint;
-    while ((codepoint = GetCharPressed())) // write text
-    {
-        if (!textedit_is_unicode_in_range(codepoint)) continue;
-
-        if (textedit->is_selecting) {
-            textedit__delete_selection(textedit);
+        if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
+            textedit__update_selection(textedit, shift);
+            if (control) { textedit__move_by_world(textedit, -1); }
+            else { --textedit->cursor; }
+            textedit->gofocus_cursor = true;
         }
 
-        new_char[0] = (char)codepoint;
-        textedit__insert(textedit, textedit->cursor, cstr(new_char));
-    }
-
-    if (IsKeyPressed(KEY_ENTER)) {
-        if (textedit->is_selecting) {
-            textedit__delete_selection(textedit);
+        if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
+        ) {
+            textedit__update_selection(textedit, shift);
+            if (control) { textedit__move_by_world(textedit, +1); }
+            else { ++textedit->cursor; }
+            textedit->gofocus_cursor = true;
         }
 
-        new_char[0] = (char)'\n';
-        textedit__insert(textedit, textedit->cursor, cstr(new_char));
-        return;
-    }
+        if (IsKeyPressed(KEY_DOWN)
+        ) {
+            textedit__update_selection(textedit, shift);
+            textedit__cursor_down(textedit, view_columns);
+            textedit->gofocus_cursor = true;
+        }
 
-    // copy
-    if (control && IsKeyPressed(KEY_C) && textedit->is_selecting) {
-        textedit__copy_selection(textedit);
-    }
-    // paste
-    if (control && IsKeyPressed(KEY_V)) {
-        const char *clipboard_cstr = GetClipboardText();
-        strview_t clipboard = cstr(clipboard_cstr);
-        if (clipboard.size > 0) {
+        if (IsKeyPressed(KEY_UP)) {
+            textedit__update_selection(textedit, shift);
+            textedit__cursor_up(textedit, view_columns);
+            textedit->gofocus_cursor = true;
+        }
+
+        if (IsKeyPressed(KEY_BACKSPACE)) {
+            if (textedit->is_selecting) {
+                textedit__delete_selection(textedit);
+            } else if (textedit->cursor > 0) {
+                textedit__delete_chunk(textedit, textedit->cursor-1, 1);
+            }
+        }
+
+        char new_char[2] = { '\0', '\0' };
+        int codepoint;
+        while ((codepoint = GetCharPressed())) // write text
+        {
+            if (!textedit_is_unicode_in_range(codepoint)) continue;
+
             if (textedit->is_selecting) {
                 textedit__delete_selection(textedit);
             }
 
-            textedit__insert(textedit, textedit->cursor, clipboard);
+            new_char[0] = (char)codepoint;
+            textedit__insert(textedit, textedit->cursor, cstr(new_char));
+        }
+
+        if (IsKeyPressed(KEY_ENTER)) {
+            if (textedit->is_selecting) {
+                textedit__delete_selection(textedit);
+            }
+
+            new_char[0] = (char)'\n';
+            textedit__insert(textedit, textedit->cursor, cstr(new_char));
+            return;
+        }
+
+        // copy
+        if (control && IsKeyPressed(KEY_C) && textedit->is_selecting) {
+            textedit__copy_selection(textedit);
+        }
+        // paste
+        if (control && IsKeyPressed(KEY_V)) {
+            const char *clipboard_cstr = GetClipboardText();
+            strview_t clipboard = cstr(clipboard_cstr);
+            if (clipboard.size > 0) {
+                if (textedit->is_selecting) {
+                    textedit__delete_selection(textedit);
+                }
+
+                textedit__insert(textedit, textedit->cursor, clipboard);
+            }
+        }
+        // redo
+        if (control && shift && IsKeyPressed(KEY_Z)) {
+            Textedit_Change *change = TexteditRing_get_from_head(
+                    &textedit->editlog.ring,
+                    textedit->editlog.cursor -1);
+            if (change != NULL) {
+                textedit__apply_change(textedit, change, false);
+                --textedit->editlog.cursor;
+                textedit->is_selecting = false;
+            }
+        }
+        // undo
+        else if (control && IsKeyPressed(KEY_Z)) {
+            Textedit_Change *change = TexteditRing_get_from_head(
+                    &textedit->editlog.ring,
+                    textedit->editlog.cursor);
+            if (change != NULL) {
+                textedit__apply_change(textedit, change, true);
+                ++textedit->editlog.cursor;
+                textedit->is_selecting = false;
+            }
         }
     }
-    // redo
-    if (control && shift && IsKeyPressed(KEY_Z)) {
-        Textedit_Change *change = TexteditRing_get_from_head(
-                &textedit->editlog.ring,
-                textedit->editlog.cursor -1);
-        if (change != NULL) {
-            textedit__apply_change(textedit, change, false);
-            --textedit->editlog.cursor;
-            textedit->is_selecting = false;
-        }
-    }
-    // undo
-    else if (control && IsKeyPressed(KEY_Z)) {
-        Textedit_Change *change = TexteditRing_get_from_head(
-                &textedit->editlog.ring,
-                textedit->editlog.cursor);
-        if (change != NULL) {
-            textedit__apply_change(textedit, change, true);
-            ++textedit->editlog.cursor;
-            textedit->is_selecting = false;
-        }
-    }
+
     // mouse
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         do {
