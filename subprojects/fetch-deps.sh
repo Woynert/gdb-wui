@@ -1,9 +1,9 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -Eeuo pipefail
 set -x
 
-# Source - https://stackoverflow.com/a
-SCRIPT_PATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+# Source - https://stackoverflow.com/a/246128
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 fetch_dependency ()
 {
@@ -12,7 +12,7 @@ fetch_dependency ()
     REVISION="$3"
 
     printf '\033[0;31m'"\nCLONING $URL ($REVISION)..."'\033[0m\n'
-    cd "$SCRIPT_PATH"
+    cd "$SCRIPT_DIR"
     git clone --filter=blob:none --no-checkout "$URL" "$DIRECTORY"
     cd "$DIRECTORY"
     git checkout "$REVISION"
