@@ -349,6 +349,16 @@ void textedit__delete_selection(Textedit *textedit) {
     textedit__delete_chunk(textedit, start, end -start);
 }
 
+void textedit__select_all(Textedit *textedit) {
+    if (textedit->buffer->size <= 0) {
+        textedit->is_selecting = false;
+        return;
+    }
+    textedit->is_selecting = true;
+    textedit->selection_origin = 0;
+    textedit->cursor = textedit->buffer->size;
+}
+
 /*
 textedit_
 woy_textedit_
@@ -783,19 +793,24 @@ void textedit_draw(
         bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
-        if (IsKeyPressed(KEY_LEFT) && (textedit->cursor > 0)) {
+        if (IsKeyPressed(KEY_LEFT)) {
             textedit__update_selection(textedit, shift);
-            if (control) { textedit__move_by_world(textedit, -1); }
-            else { --textedit->cursor; }
             textedit->gofocus_cursor = true;
+
+            if (textedit->cursor > 0) {
+                if (control) { textedit__move_by_world(textedit, -1); }
+                else { --textedit->cursor; }
+            }
         }
 
-        if (IsKeyPressed(KEY_RIGHT) && (textedit->cursor < textedit->buffer->size)
-        ) {
+        if (IsKeyPressed(KEY_RIGHT)) {
             textedit__update_selection(textedit, shift);
-            if (control) { textedit__move_by_world(textedit, +1); }
-            else { ++textedit->cursor; }
             textedit->gofocus_cursor = true;
+
+            if (textedit->cursor < textedit->buffer->size) {
+                if (control) { textedit__move_by_world(textedit, +1); }
+                else { ++textedit->cursor; }
+            }
         }
 
         if (IsKeyPressed(KEY_DOWN)
@@ -863,6 +878,10 @@ void textedit_draw(
 
                 textedit__insert(textedit, textedit->cursor, clipboard);
             }
+        }
+        // select all
+        if (control && IsKeyPressed(KEY_A)) {
+            textedit__select_all(textedit);
         }
         // redo
         if (control && shift && IsKeyPressed(KEY_Z)) {
