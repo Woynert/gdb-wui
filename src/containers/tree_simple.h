@@ -64,6 +64,11 @@ static TreeSi PRE(create)(void) { // TODO: memory managment
     return tree;
 }
 
+static void PRE(free)(TreeSi *tree) {
+    tree->id_counter = 0;
+    PRE(Node_DynArr_free)(&tree->nodes);
+}
+
 static void PRE(clear)(TreeSi *tree) {
     tree->id_counter = 0;
     PRE(Node_DynArr_clear_preserving_capacity)(&tree->nodes);

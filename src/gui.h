@@ -99,6 +99,10 @@ void GUI_init_global_context(void) {
     GUI.font_width = (float)int_max(w1, int_max(w2, w3));
 }
 
+void GUI_cleanup(void) {
+    textedit_free(&GUI.textedit);
+}
+
 void GUI_open_context_menu(strview_t options_str) {
     if (options_str.size <= 0) return;
     GUI.curr_popup = POPUP_CONTEXT_MENU;

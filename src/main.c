@@ -236,6 +236,10 @@ int main (void) {
 
     // Cleanup
 
+    CloseWindow();
+    GUI_cleanup();
+    WuiState_free(&wui_state);
+
     /*kill(ipc_ctx.child_pid, SIGINT);*/
     /*Fork_cleanup(&fork_ctx);*/
 

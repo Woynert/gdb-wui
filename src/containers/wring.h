@@ -42,20 +42,21 @@ typedef struct {
     TYPE *buffer;
 } WRing;
 
-static WRing    PRE(create)            (uint capacity);
-static int      PRE(push_head)         (WRing *ring, TYPE item);
-static int      PRE(extend_head)       (WRing *ring);
-static void     PRE(extend_head_force) (WRing *ring);
-static TYPE    *PRE(pop_head)          (WRing *ring);
-static TYPE    *PRE(pop_tail)          (WRing *ring);
-static TYPE    *PRE(get_from_head)     (WRing *ring, uint pos);
-static TYPE    *PRE(get_from_tail)     (WRing *ring, uint pos);
-static TYPE    *PRE(get_head)     (WRing *ring);
-static TYPE    *PRE(get_tail)     (WRing *ring);
-static void     PRE(clear)             (WRing *ring);
-static int      PRE(remove_from_tail)  (WRing *ring, uint pos);
+static WRing  PRE(create)            (uint capacity);
+static void   PRE(free)              (WRing *ring);
+static int    PRE(push_head)         (WRing *ring, TYPE item);
+static int    PRE(extend_head)       (WRing *ring);
+static void   PRE(extend_head_force) (WRing *ring);
+static TYPE  *PRE(pop_head)          (WRing *ring);
+static TYPE  *PRE(pop_tail)          (WRing *ring);
+static TYPE  *PRE(get_from_head)     (WRing *ring, uint pos);
+static TYPE  *PRE(get_from_tail)     (WRing *ring, uint pos);
+static TYPE  *PRE(get_head)          (WRing *ring);
+static TYPE  *PRE(get_tail)          (WRing *ring);
+static void   PRE(clear)             (WRing *ring);
+static int    PRE(remove_from_tail)  (WRing *ring, uint pos);
 #ifdef WRING_ENABLE_COMPARISONS
-static bool     PRE(has_item)          (WRing *ring, TYPE item);
+static bool   PRE(has_item)          (WRing *ring, TYPE item);
 #endif
 /*
  * TODO:
@@ -68,6 +69,13 @@ static WRing PRE(create) (uint capacity) {
     ring._capacity = capacity;
     ring.buffer = (TYPE*)calloc(ring._capacity, sizeof(TYPE));
     return ring;
+}
+
+static void PRE(free) (WRing *ring) {
+    if (ring->buffer != NULL) {
+        free(ring->buffer);
+        ring->buffer = NULL;
+    }
 }
 
 /*

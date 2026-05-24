@@ -98,6 +98,17 @@ void textedit_init(Textedit *textedit) {
     }
 }
 
+void textedit_free(Textedit *textedit) {
+    strbuf_destroy(&textedit->buffer);
+    int_DynArr_free(&textedit->linebreaks);
+    TexteditVisualLine_DynArr_free(&textedit->visualblocks);
+
+    for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
+        strbuf_destroy(&textedit->editlog.ring.buffer[i].buffer);
+    }
+    TexteditRing_free(&textedit->editlog.ring);
+}
+
 // FIXME: This startindex doesn't work because we are not preserving previous
 //        lines.
 void textedit__update_linebreaks(Textedit *textedit, int startindex) {
@@ -166,13 +177,11 @@ void textedit__scroll_down(Textedit *textedit) {
 void textedit__scroll_up(Textedit *textedit) {
     /* We decide either to decrease 'scroll' or 'wrap_scroll'. */
     if (textedit->visualblocks.size > 1) {
-        TexteditVisualLine prev_line =
-        textedit->visualblocks.items[
-            textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll -1
-        ];
         if (textedit->wrap_scroll > 0) {
             --textedit->wrap_scroll;
         } else if (textedit->scroll > 0) {
+            TexteditVisualLine prev_line = textedit->visualblocks.items[
+                textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll -1 ];
             --textedit->scroll;
             textedit->visualline_corresponding_to_scroll -= prev_line.wrap +1;
             textedit->wrap_scroll = prev_line.wrap;
@@ -591,7 +600,13 @@ void textedit_draw(
     visualline_start = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_start);
     visualline_end   = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_end);
 
-    printf("%d:%d\n", textedit->cursor_visual_line, textedit->selection_visual_line);
+     //printf("%d:%d\n", textedit->cursor_visual_line, textedit->selection_visual_line);
+
+    printf("%d:%d:%d\n",
+        textedit->scroll,
+        textedit->wrap_scroll,
+        textedit->visualline_corresponding_to_scroll
+    );
 
     /* Draw selection area */
 

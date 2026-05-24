@@ -42,6 +42,14 @@ static inline PRE(DynArr) PRE(DynArr_create) (void) {
 }
 
 
+static inline void PRE(DynArr_free) (PRE(DynArr) *da) {
+    if (da->items != NULL) {
+        free(da->items);
+        da->items = NULL;
+    }
+}
+
+
 /// Inserts item at the back
 /// @param   item  Item passed as value
 /// @returns index

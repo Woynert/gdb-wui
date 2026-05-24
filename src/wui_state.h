@@ -83,5 +83,10 @@ void WuiState_init (WuiState *wui_state) {
     wui_state->symbol_tree = SymbolTree_create();
 }
 
+void WuiState_free (WuiState *wui_state) {
+    WuiBreakpoint_DynArr_free(&wui_state->breakpoints);
+    SymbolTree_free(&wui_state->symbol_tree);
+}
+
 #endif // !WUI_STATE
 
