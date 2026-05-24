@@ -86,8 +86,8 @@ void GUI_init_global_context(void) {
     //LoadFont
     GUI.font_spacing = 1;
     GUI.font_size = 15;
-    GUI.font = LoadFontEx("./IosevkaFixed-Regular.ttf", (int)GUI.font_size, 0, 250);
-    //GUI.font = LoadFontEx("./assets/RobotoMono-Regular.ttf", (int)GUI.font_size, 0, 250);
+    GUI.font = LoadFontEx("assets/IosevkaFixed-Regular.ttf", (int)GUI.font_size, 0, 250);
+    //GUI.font = LoadFontEx("assets/RobotoMono-Regular.ttf", (int)GUI.font_size, 0, 250);
     //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
 
     int w1 = (int)MeasureTextEx(GUI.font, "W",

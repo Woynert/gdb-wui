@@ -105,7 +105,7 @@ void DrawCtx_setup(void) {
     DrawCtx draw_ctx = { 0 };
     draw_ctx.font_size = 16;
     draw_ctx.font_spacing = 1;
-    draw_ctx.font = LoadFontEx("IosevkaFixed-Regular.ttf",
+    draw_ctx.font = LoadFontEx("assets/IosevkaFixed-Regular.ttf",
             draw_ctx.font_size, 0, 250);
     //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
 
