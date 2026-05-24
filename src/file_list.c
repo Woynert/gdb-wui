@@ -63,6 +63,10 @@ int main (void) {
         DrawRectangleRec(file_viewer_rect, COLOR_CODE_BG);
         FileViewer_render(&file_viewer, file_viewer_rect);
 
+        DrawTextEx(DRAW_CTX.font, "[Hello😀😃😄😁😆😅😂🤣🥲😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🥸🤩🥳😏😒😞😔😟😕🙁☹️]", (Vector2) { 50, 10 },
+                (float)DRAW_CTX.font_size, DRAW_CTX.font_spacing, COLOR_CODE_FG
+        );
+
         EndDrawing();
     }
 

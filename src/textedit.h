@@ -76,8 +76,8 @@ typedef struct Textedit {
     /* cached */
     int cursor_visual_line;
     int selection_visual_line;
-    int first_visual_line_wrap_levels;
-    int second_visual_line_wrap_levels;
+    //int first_visual_line_wrap_levels;
+    //int second_visual_line_wrap_levels;
     bool gofocus_cursor;
     int visualline_corresponding_to_scroll; // Matches a real line.
     double cursor_blink_timestamp_secs;
@@ -387,8 +387,8 @@ void textedit__build_visual_lines(
 
     TexteditVisualLine_DynArr_clear_preserving_capacity(&textedit->visualblocks);
 
-    textedit->first_visual_line_wrap_levels = 0;
-    textedit->second_visual_line_wrap_levels = 0;
+    //textedit->first_visual_line_wrap_levels = 0;
+    //textedit->second_visual_line_wrap_levels = 0;
 
     for (;b <= source.size && line_counter < max_line_amount;) {
 
@@ -413,11 +413,11 @@ void textedit__build_visual_lines(
             continue;
         }
         if (textOffsetX == view_columns) {
-            if (line_counter == 0) {
-                ++textedit->first_visual_line_wrap_levels;
-            } else if (line_counter == 1) {
-                ++textedit->second_visual_line_wrap_levels;
-            }
+            //if (line_counter == 0) {
+                //++textedit->first_visual_line_wrap_levels;
+            //} else if (line_counter == 1) {
+                //++textedit->second_visual_line_wrap_levels;
+            //}
 
             TexteditVisualLine_DynArr_insert(&textedit->visualblocks,
                 (TexteditVisualLine) {
@@ -566,8 +566,6 @@ void textedit_draw(
     TexteditVisualLine visual_line = { 0 };
 
     int view_max_lines = (int)floorf(view_rect.height / line_height);
-    int visualline_start = textedit->visualline_corresponding_to_scroll
-                     + textedit->wrap_scroll;
 
     if (textedit->must_rebuild_visual_blocks) {
         textedit->must_rebuild_visual_blocks = false;
@@ -585,8 +583,15 @@ void textedit_draw(
     /* Find visualline_corresponding_to_scroll */
 
     textedit__find_visualline_corresponding_to_scroll(textedit);
-    visualline_start = textedit->visualline_corresponding_to_scroll
+    int visualline_start = textedit->visualline_corresponding_to_scroll
                      + textedit->wrap_scroll;
+    int visualline_end = int_min(
+        visualline_start + view_max_lines, (int)textedit->visualblocks.size -1
+    );
+    visualline_start = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_start);
+    visualline_end   = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_end);
+
+    printf("%d:%d\n", textedit->cursor_visual_line, textedit->selection_visual_line);
 
     /* Draw selection area */
 
@@ -604,19 +609,21 @@ void textedit_draw(
             cursor_end = textedit->selection_origin;
             visual_end = textedit->selection_visual_line;
         }
-        if (visual_start == -1 && visual_end == -1) { // ends not visible
-            TexteditVisualLine line = textedit->visualblocks.items[0];
+        if ((visual_start == -1 || visual_start < visualline_start) &&
+            (visual_end == -1 || visual_end > visualline_end) // ends not visible
+        ) {
+            TexteditVisualLine line = textedit->visualblocks.items[visualline_start];
             if (!(cursor_start <= line.start && line.start < cursor_end)) {
                 break;
             }
         }
-        if (visual_start == -1) { // start not visible
-            visual_start = 0;
-            TexteditVisualLine line = textedit->visualblocks.items[0];
+        if (visual_start == -1 || visual_start < visualline_start) { // start not visible
+            visual_start = visualline_start;
+            TexteditVisualLine line = textedit->visualblocks.items[visual_start];
             cursor_start = line.start;
         }
-        if (visual_end == -1) { // end not visible
-            visual_end = (int)(textedit->visualblocks.size) -1;
+        if (visual_end == -1 || visual_end > visualline_end) { // end not visible
+            visual_end = visualline_end;
             TexteditVisualLine line = textedit->visualblocks.items[visual_end];
             cursor_end = line.start + view_columns;
         }
@@ -669,7 +676,7 @@ void textedit_draw(
                 rect = (Rectangle) {
                     view_rect.x + number_padding,
                     start_y + (float)(i) * (font_size + line_spacing),
-                    view_rect.x + view_rect.width, font_size
+                    view_rect.width - number_padding, font_size
                 };
                 DrawRectangleRec(rect, BLUE); // body
             }
@@ -692,9 +699,9 @@ void textedit_draw(
     static strbuf_space_t(16) _aux_str = STRBUF_STATIC_INIT(16);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
 
-    int visualline_end   = visualline_start + view_max_lines;
-    visualline_start = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_start);
-    visualline_end   = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_end);
+    //int visualline_end   = visualline_start + view_max_lines;
+    //visualline_start = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_start);
+    //visualline_end   = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_end);
 
     for (int i = visualline_start; i <= visualline_end; ++i) {
         visual_line = textedit->visualblocks.items[i];

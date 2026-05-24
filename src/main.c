@@ -16,6 +16,10 @@
 #include "wui_state.h"
 #include "ipc.h"
 
+/*void away(int *p) {*/
+    /**p = 9;*/
+/*}*/
+
 
 int main (void) {
     printf("Hello there\n");
@@ -169,6 +173,7 @@ int main (void) {
     GUI_init_global_context();
 
     textedit_toggle_line_numbers(&GUI.textedit, true);
+    textedit_set_editable(&GUI.textedit, true);
     textedit_enable(&GUI.textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
@@ -183,15 +188,15 @@ int main (void) {
         "#include \"math.hhhh3\"\n"
         "#include \"math.hhhh4\"\n"
         "#include \"math.hhhh5\"\n"
-        "[GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);"
-        "GUI_TextEdit__find_cursor_visual_line(textedit);]\n"
+        "[GUI_TextEdit__find_curs\nor_visual_line(textedit);"
+        "\nGUI_TextEdit__find_cursor_\nvisual_line(textedit);"
+        "G\nUI_TextEdit__find_cursor_vi\nsual_line(textedit);"
+        "GU\nI_TextEdit__find_cursor_visu\nal_line(textedit);"
+        "GUI\n_TextEdit__find_cursor_visual\n_line(textedit);"
+        "GUI\n_TextEdit__find_cursor_visual_li\nne(textedit);"
+        "GU\nI_TextEdit__find_cursor_visual_l\nine(textedit);"
+        "GUI\n_TextEdit__find_cursor_visual_lin\ne(textedit);"
+        "GUI_\nTextEdit__find_cursor_visual_l\nine(textedit);]\n"
         "#include \"math.hhhh6\"\n"
         /*"#include \"hello.world.hello.world.hello.world.hello.world\"\n"*/
         "\n"
@@ -233,6 +238,31 @@ int main (void) {
 
     /*kill(ipc_ctx.child_pid, SIGINT);*/
     /*Fork_cleanup(&fork_ctx);*/
+
+    // Buffer overflow
+    /*int *list = (int*) malloc(sizeof(int) * 7);*/
+    /*if (0) {*/
+        /*list[8] = 888;*/
+        /*free(list);*/
+    /*}*/
+
+    /*// Use after free*/
+    /*int *p[10] = { 0 };*/
+    /*for (int i = 0; i < 10; ++i) {*/
+        /*p[0] = (int*) malloc(sizeof(int));*/
+    /*}*/
+    /**p[0] = 40;*/
+    /*if (1) {*/
+        /*free(p[1]);*/
+        /**p[1] = 10;*/
+    /*}*/
+
+    /*// Signed overflow*/
+    /*int x = INT_MAX;*/
+    /*++x;*/
+
+    /*// Invalid shift*/
+    /*int y = 1 << (*p[0]);*/
 
     return 0;
 }

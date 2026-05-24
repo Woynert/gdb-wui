@@ -1,6 +1,14 @@
-project('raylib-game', 'c', 'cpp')
+#project('raylib-game', 'c', 'cpp')
+project('raylib-game', 'c')
+  #default_options: [
+    ## 'b_ndebug=false',
 
-extra_args = ['-O']
+    ## enable ASAN on clang
+    #'b_sanitize=address' ,
+    #'b_lundef=false',
+  #],
+#)
+
 my_extra_args = [
   '-Wall',
   '-Werror',
@@ -25,8 +33,22 @@ my_extra_args = [
   '-Wno-error=unused-function',
   '-Wno-error=unused-variable',
   '-Wno-error=stringop-truncation',
-  '-Wno-unused-function'
+  '-Wno-unused-function',
+
+  # sanitizer
+  #'-fsanitize=address',
+  #'-lundef=false',
 ]
+
+add_project_arguments([
+  '-fsanitize=address,undefined',
+  '-fno-omit-frame-pointer',
+  '-g',
+  '-O1', # O1 supposedly better than O0 or O2.
+], language:'c')
+add_project_link_arguments([
+  '-fsanitize=address,undefined',
+], language:'c')
 
 add_global_arguments('-DSTRBUF_PROVIDE_PRINTF', language: 'c')
 
@@ -101,3 +123,13 @@ tree_exe = executable(
   ]
   ,c_args : my_extra_args
 )
+
+#ring_exe = executable(
+  #'ring'
+  #,'src/containers/fiforing_test.c'
+  #,dependencies : [
+    #math_dep,
+    #mickstr_dep
+  #]
+  #,c_args : my_extra_args
+#)
