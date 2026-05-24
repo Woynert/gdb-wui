@@ -4,7 +4,7 @@
 # Explicitly add tracked files:
 
 !/.gitignore
-!/fetch-deps.sh
+!/fetch-deps.py
 
 !/mickstr/
 !/mickstr/meson.build

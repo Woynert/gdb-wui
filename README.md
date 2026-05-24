@@ -1,7 +1,7 @@
 ## Actual steps
 
 * nix-shell
-* ./subprojects/fetch-deps.sh
+* ./subprojects/fetch-deps.py
 * make mesonSetupDebug
 * make compile
-* steam-run ./build/<binary>
+* steam-run make run

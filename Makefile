@@ -15,3 +15,6 @@ compile:
 
 generate:
 	src/bin2header_struct.py -i src/gdb_woy_api.py -o src/gdb_woy_api.h -v PYTHON_CODE
+
+run:
+	LSAN_OPTIONS=suppressions=suppr.txt ./build/gdbwui
