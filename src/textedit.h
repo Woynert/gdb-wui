@@ -847,6 +847,11 @@ void textedit_draw(
         if (control && IsKeyPressed(KEY_C) && textedit->is_selecting) {
             textedit__copy_selection(textedit);
         }
+        // cut
+        if (control && IsKeyPressed(KEY_X) && textedit->is_selecting) {
+            textedit__copy_selection(textedit);
+            textedit__delete_selection(textedit);
+        }
         // paste
         if (control && IsKeyPressed(KEY_V)) {
             const char *clipboard_cstr = GetClipboardText();
