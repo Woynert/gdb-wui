@@ -301,7 +301,7 @@ void GUI_draw_all(WuiState *state) {
         textedit_draw(&GUI.textedit, view_rect, GUI.font, GUI.font_size,
                 GUI.font_spacing, GUI.font_width);
 
-    EndDrawing();
+    /* EndDrawing(); Do not call EndDrawing here. See main loop. */
 }
 
 #endif // !GUI_H

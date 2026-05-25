@@ -11,11 +11,12 @@
     USAGE: Modify your main loop to include this functions:
 
         InitWindow(...);
-        BetterMouse_hook_events(); // Call after InitWindow
+        BetterMouse_hook_events(); <-- Call after InitWindow.
 
         while (!WindowShouldClose()) {
             ... Drawing ...
-            BetterMouse_consume_all(); // Call at the end of frame
+            BetterMouse_consume_all(); <-- Call it just before EndDrawing.
+            EndDrawing();
         }
 
     Then use API like BetterMouse_is_pressed(MOUSE_BUTTON_LEFT).

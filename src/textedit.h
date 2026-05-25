@@ -11,6 +11,7 @@
 #include "strview.h"
 #include "strbuf_extra.h"
 #include "portable_utils.h"
+#include "better_mouse_input.h"
 
 #ifndef DYN_ARR_TYPE_UINT
 #define DYN_ARR_TYPE_UINT
@@ -231,6 +232,7 @@ void textedit__update_selection(Textedit *textedit, bool shift) {
         }
     }
     else if (textedit->is_selecting) {
+        textedit->selection_origin = textedit->cursor;
         textedit->is_selecting = false;
     }
 }
@@ -908,7 +910,10 @@ void textedit_draw(
     }
 
     // mouse
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    if (BetterMouse_is_pressed(MOUSE_BUTTON_LEFT)) {
+        textedit__update_selection(textedit, false);
+    }
+    if (BetterMouse_is_held(MOUSE_BUTTON_LEFT)) {
         do {
             Vector2 mouse_pos = GetMousePosition();
             float char_width = font_width + font_spacing;
@@ -935,7 +940,7 @@ void textedit_draw(
             ));
 
             textedit__reset_cursor_blink(textedit);
-            textedit__update_selection(textedit, false);
+            textedit__update_selection(textedit, true);
 
         } while (0);
     }

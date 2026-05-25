@@ -236,7 +236,9 @@ int main (void) {
             IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
         }
 
+        /* ↓ EndDrawing() sleeps and during this time we can catch inputs. */
         BetterMouse_consume_all();
+        EndDrawing();
     }
 
     // Cleanup
