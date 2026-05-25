@@ -4,6 +4,7 @@
 # Explicitly add tracked files:
 
 !/.gitignore
+!/README.md
 !/fetch-deps.py
 
 !/mickstr/
@@ -13,3 +14,5 @@
 !/raygui/
 !/raygui/meson.build
 !/raygui/raygui_implementation.c
+
+!/raylib-fix-GetWindowHandler.patch

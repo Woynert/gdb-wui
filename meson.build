@@ -50,9 +50,11 @@ add_project_link_arguments([
   '-fsanitize=address,undefined',
 ], language:'c')
 
+# strbuf
+
 add_global_arguments('-DSTRBUF_PROVIDE_PRINTF', language: 'c')
 
-# general deps
+# General dependencies
 
 cc = meson.get_compiler('c')
 math_dep = cc.find_library('m', required : false)

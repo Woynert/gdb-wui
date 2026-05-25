@@ -10,6 +10,7 @@
 #include "strview.h"
 #include "portable_utils.h"
 #include "cli_prompt.h"
+#include "better_mouse_input.h"
 
 #include "gui.h"
 #include "gdb_woy_api.h"
@@ -170,6 +171,8 @@ int main (void) {
     const int screenHeight = 600;
     InitWindow(screenWidth, screenHeight, "WUI");
     SetTargetFPS(30);
+
+    BetterMouse_hook_events();
     GUI_init_global_context();
 
     textedit_toggle_line_numbers(&GUI.textedit, true);
@@ -232,6 +235,8 @@ int main (void) {
             CliPrompt_clear(&cli_prompt);
             IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
         }
+
+        BetterMouse_consume_all();
     }
 
     // Cleanup

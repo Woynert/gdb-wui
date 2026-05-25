@@ -1,0 +1,14 @@
+diff --git a/src/platforms/rcore_desktop_glfw.c b/src/platforms/rcore_desktop_glfw.c
+index 6def8e77..e66ba8b2 100644
+--- a/src/platforms/rcore_desktop_glfw.c
++++ b/src/platforms/rcore_desktop_glfw.c
+@@ -764,6 +764,9 @@ void SetWindowFocused(void)
+ // Get native window handle
+ void *GetWindowHandle(void)
+ {
++    #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
++    return platform.handle;
++    #endif
+ #if defined(_WIN32)
+     // NOTE: Returned handle is: void *HWND (windows.h)
+     return glfwGetWin32Window(platform.handle);

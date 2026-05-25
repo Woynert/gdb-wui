@@ -610,13 +610,13 @@ void textedit_draw(
     visualline_start = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_start);
     visualline_end   = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_end);
 
-     //printf("%d:%d\n", textedit->cursor_visual_line, textedit->selection_visual_line);
+    //printf("%d:%d\n", textedit->cursor_visual_line, textedit->selection_visual_line);
 
-    printf("%d:%d:%d\n",
-        textedit->scroll,
-        textedit->wrap_scroll,
-        textedit->visualline_corresponding_to_scroll
-    );
+    //printf("%d:%d:%d\n",
+        //textedit->scroll,
+        //textedit->wrap_scroll,
+        //textedit->visualline_corresponding_to_scroll
+    //);
 
     /* Draw selection area */
 
@@ -935,6 +935,7 @@ void textedit_draw(
             ));
 
             textedit__reset_cursor_blink(textedit);
+            textedit__update_selection(textedit, false);
 
         } while (0);
     }
