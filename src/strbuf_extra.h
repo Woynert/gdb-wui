@@ -4,7 +4,7 @@
 #include "strbuf.h"
 
 static inline int _strbuf_int_min(int a, int b) { return a < b ? a : b; }
-static strview_t strview_of_buf(strbuf_t* buf)
+static strview_t strview_of_buf(strbuf_t* buf) // TODO: Delete this or justify it.
 {
     strview_t str = STRVIEW_INVALID;
     if(buf)

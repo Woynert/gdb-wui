@@ -57,7 +57,7 @@ typedef struct TexteditVisualLine {
 
 typedef struct Textedit_Log {
     TexteditRing ring;
-    uint cursor;
+    uint cursor; // Relative to end: 0 means latest, 1 means latest-1.
 } Textedit_Log;
 
 typedef struct Textedit {
@@ -326,6 +326,7 @@ void textedit__insert(Textedit *textedit, int start, strview_t str) {
 }
 
 void textedit__delete_chunk(Textedit *textedit, int start, int size) {
+    textedit__discard_undo_log(textedit);
     TexteditRing_extend_head_force(&textedit->editlog.ring);
     Textedit_Change *change = TexteditRing_get_head(&textedit->editlog.ring);
     if (change == NULL) { return; }
@@ -526,29 +527,56 @@ void textedit__debug_draw(
     Textedit *textedit, Vector2 pos, int view_max_lines,
     Font font, float font_size, float font_spacing
 ) {
-    float line_spacing = 2;
-    float line_height = font_size + line_spacing;
-    strview_t source = strview_of_buf(textedit->buffer);
-    for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
-        TexteditVisualLine visual_line = textedit->visualblocks.items[i];
-        DrawTextEx_strview( font,
-            strview_sub(source, visual_line.start, visual_line.end),
-            (Vector2) { pos.x, pos.y + (float)i * line_height },
-            font_size, font_spacing, line_spacing, BLACK);
+    if (1) { // DEBUG LINE RENDERING
+        float line_spacing = 2;
+        float line_height = font_size + line_spacing;
+        strview_t source = strview_of_buf(textedit->buffer);
+        for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
+            TexteditVisualLine visual_line = textedit->visualblocks.items[i];
+            DrawTextEx_strview( font,
+                strview_sub(source, visual_line.start, visual_line.end),
+                (Vector2) { pos.x, pos.y + (float)i * line_height },
+                font_size, font_spacing, line_spacing, BLACK);
+        }
+        DrawRectangleLinesEx((Rectangle){
+            pos.x, pos.y + (float)(textedit->visualline_corresponding_to_scroll)
+                        * line_height,
+            300, line_height }, 2, BLUE);
+        DrawRectangleLinesEx((Rectangle){
+            pos.x, pos.y + (float)(textedit->visualline_corresponding_to_scroll
+                    + textedit->wrap_scroll) * line_height,
+            300, line_height }, 2, RED);
+        DrawRectangleLinesEx((Rectangle){
+            pos.x, pos.y + (float)(int_min((int)textedit->visualblocks.size -1,
+            textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll
+                + view_max_lines)) * line_height,
+            300, line_height }, 2, PINK);
     }
-    DrawRectangleLinesEx((Rectangle){
-        pos.x, pos.y + (float)(textedit->visualline_corresponding_to_scroll)
-                    * line_height,
-        300, line_height }, 2, BLUE);
-    DrawRectangleLinesEx((Rectangle){
-        pos.x, pos.y + (float)(textedit->visualline_corresponding_to_scroll
-                + textedit->wrap_scroll) * line_height,
-        300, line_height }, 2, RED);
-    DrawRectangleLinesEx((Rectangle){
-        pos.x, pos.y + (float)(int_min((int)textedit->visualblocks.size -1,
-        textedit->visualline_corresponding_to_scroll + textedit->wrap_scroll
-            + view_max_lines)) * line_height,
-        300, line_height }, 2, PINK);
+
+    if (0) { // DEBUG EDIT HISTORY
+        static strbuf_space_t(4096) _tmp_str = STRBUF_STATIC_INIT(4096);
+        strbuf_t *tmp_str = (strbuf_t*)(&_tmp_str);
+        static strbuf_space_t(4096) _tmp_str_bk = STRBUF_STATIC_INIT(4096);
+        strbuf_t *tmp_str_bk = (strbuf_t*)(&_tmp_str_bk);
+
+        TexteditRing *ring = &textedit->editlog.ring;
+        uint actual_cursor = ring->size - textedit->editlog.cursor;
+        strbuf_printf(&tmp_str, "History size %u, cursor %d, actual %d\n",
+                ring->size, textedit->editlog.cursor, actual_cursor);
+
+        for (uint i = 0; i < ring->size; ++i) {
+            Textedit_Change *change = &ring->buffer[i];
+            strbuf_append_printf(&tmp_str, "%s %d: %s at %d '%s'\n",
+                i == actual_cursor ? "->" : "  ",
+                i, change->is_insert ? "insert" : "delete",
+                change->start, change->buffer->cstr);
+        }
+
+        if (strview_compare(strbuf_view(&tmp_str), strbuf_view(&tmp_str_bk)) != 0){
+            printf("[\n%s\n]\n", tmp_str->cstr);
+            strbuf_cat(&tmp_str_bk, strbuf_view(&tmp_str));
+        }
+    }
 }
 
 void textedit_draw(
