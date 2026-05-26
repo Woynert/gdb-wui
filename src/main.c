@@ -170,6 +170,8 @@ int main (void) {
     // Raylib stuff
     const int screenWidth = 600;
     const int screenHeight = 600;
+
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(screenWidth, screenHeight, "WUI");
     SetTargetFPS(30);
 
@@ -182,7 +184,11 @@ int main (void) {
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
         "[123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.]\n"
-        "1\n"
+        "1�1\n"
+        "latin[ñ,ü,Ā,č,ω,Ω,Ж]\n"
+        "symbols[←,✓,☃,€]\n"
+        "CJK[世,界]\n"
+        "Emoji[😀,🚀,🦀,🧠]\n"
         "#include \"math.hhhhh\""
         "#include \"math.h\".123.123.123.123.123.123.123.123\n"
         "#include \"math.hhhhh1\"\n"

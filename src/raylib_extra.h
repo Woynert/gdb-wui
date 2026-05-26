@@ -33,7 +33,29 @@ void DrawTexture_flipped(Texture2D texture, int posX, int posY, Color tint)
 }
 
 /*
- * EXTRACTED FROM rtext.c
+ * Extracted from rtext.c
+ * Get index position for a unicode character on font, fallbacks to '�'
+ */
+int GetGlyphIndex_woy(Font font, int codepoint) {
+    int index = 0;
+    if (!IsFontValid(font)) return index;
+    int fallbackIndex = 0;
+    for (int i = 0; i < font.glyphCount; i++)
+    {
+        if (font.glyphs[i].value == 0x003F) fallbackIndex = i;
+
+        if (font.glyphs[i].value == codepoint)
+        {
+            index = i;
+            break;
+        }
+    }
+    if ((index == 0) && (font.glyphs[0].value != codepoint)) index = fallbackIndex;
+    return index;
+}
+
+/*
+ * Extracted from rtext.c
  * @note: chars spacing is NOT proportional to fontSize.
  */
 void DrawTextEx_strview(
@@ -48,7 +70,7 @@ void DrawTextEx_strview(
     {
         int codepointByteCount = 0;
         int codepoint = GetCodepointNext(&string.data[i], &codepointByteCount);
-        int index = GetGlyphIndex(font, codepoint);
+        int index = GetGlyphIndex_woy(font, codepoint);
 
         if (codepoint == '\n') {
             textOffsetY += (fontSize + textLineSpacing);

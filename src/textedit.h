@@ -577,6 +577,13 @@ void textedit__debug_draw(
             strbuf_cat(&tmp_str_bk, strbuf_view(&tmp_str));
         }
     }
+
+    if (1) {
+        int posx = 0;
+        int posy = 300;
+        DrawRectangle(posx, posy, font.texture.width, font.texture.height, BLACK);
+        DrawTexture(font.texture, posx, posy, WHITE);
+    }
 }
 
 void textedit_draw(
