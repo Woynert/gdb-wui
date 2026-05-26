@@ -221,14 +221,17 @@ void textedit__cursor_up(Textedit *textedit, int view_columns) {
     );
 }
 
-void textedit__update_selection(Textedit *textedit, bool shift) {
+void textedit__update_selection(Textedit *textedit, bool shift_pressed, int cursor_prev_pos) {
     // shift    + no_selecting -> start selecting
     // shift    + selecting    -> continue selecting
     // no shift + selecting    -> stop selecting
-    if (shift) {
+    if (shift_pressed) {
         if (!textedit->is_selecting) {
-            textedit->selection_origin = textedit->cursor;
-            textedit->is_selecting = true;
+            textedit->selection_origin = cursor_prev_pos;
+            textedit->is_selecting = cursor_prev_pos != textedit->cursor;
+        }
+        else if (textedit->selection_origin == textedit->cursor) {
+            textedit->is_selecting = false;
         }
     }
     else if (textedit->is_selecting) {
@@ -791,40 +794,45 @@ void textedit_draw(
 
     // controls
 
+    int prev_cursor;
     if (textedit->editable) {
         bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
         if (IsKeyPressed(KEY_LEFT)) {
-            textedit__update_selection(textedit, shift);
-            textedit->gofocus_cursor = true;
-
+            prev_cursor = textedit->cursor;
             if (textedit->cursor > 0) {
                 if (control) { textedit__move_by_world(textedit, -1); }
                 else { --textedit->cursor; }
             }
+
+            textedit__update_selection(textedit, shift, prev_cursor);
+            textedit->gofocus_cursor = true;
         }
 
         if (IsKeyPressed(KEY_RIGHT)) {
-            textedit__update_selection(textedit, shift);
-            textedit->gofocus_cursor = true;
-
+            prev_cursor = textedit->cursor;
             if (textedit->cursor < textedit->buffer->size) {
                 if (control) { textedit__move_by_world(textedit, +1); }
                 else { ++textedit->cursor; }
             }
+
+            textedit__update_selection(textedit, shift, prev_cursor);
+            textedit->gofocus_cursor = true;
         }
 
         if (IsKeyPressed(KEY_DOWN)
         ) {
-            textedit__update_selection(textedit, shift);
+            prev_cursor = textedit->cursor;
             textedit__cursor_down(textedit, view_columns);
+            textedit__update_selection(textedit, shift, prev_cursor);
             textedit->gofocus_cursor = true;
         }
 
         if (IsKeyPressed(KEY_UP)) {
-            textedit__update_selection(textedit, shift);
+            prev_cursor = textedit->cursor;
             textedit__cursor_up(textedit, view_columns);
+            textedit__update_selection(textedit, shift, prev_cursor);
             textedit->gofocus_cursor = true;
         }
 
@@ -834,6 +842,7 @@ void textedit_draw(
             } else if (textedit->cursor > 0) {
                 textedit__delete_chunk(textedit, textedit->cursor-1, 1);
             }
+            textedit->is_selecting = false;
         }
 
         char new_char[2] = { '\0', '\0' };
@@ -910,11 +919,11 @@ void textedit_draw(
     }
 
     // mouse
-    if (BetterMouse_is_pressed(MOUSE_BUTTON_LEFT)) {
-        textedit__update_selection(textedit, false);
-    }
     if (BetterMouse_is_held(MOUSE_BUTTON_LEFT)) {
+        bool first_press = BetterMouse_is_pressed(MOUSE_BUTTON_LEFT);
         do {
+            prev_cursor = textedit->cursor;
+
             Vector2 mouse_pos = GetMousePosition();
             float char_width = font_width + font_spacing;
             float mouse_x = mouse_pos.x - (view_rect.x + number_padding - char_width/2.f);
@@ -940,7 +949,7 @@ void textedit_draw(
             ));
 
             textedit__reset_cursor_blink(textedit);
-            textedit__update_selection(textedit, true);
+            textedit__update_selection(textedit, !first_press, prev_cursor);
 
         } while (0);
     }

@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <sys/prctl.h>
 
+#include "raylib.h"
 #include "raygui.h"
 #include "strbuf.h"
 #include "strview.h"
