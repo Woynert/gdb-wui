@@ -70,7 +70,6 @@ typedef struct Textedit {
     int selection_origin;
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
     int_DynArr linebreaks; /* Todo: Mark linebreaks as dirty. */
-    /* Chunks described as pair of indexes: start, end, start, end, ... */
     TexteditVisualLine_DynArr visualblocks; 
     int line_amount;
     Textedit_Log editlog;
@@ -401,25 +400,23 @@ void textedit__build_visual_lines(
     if (from_real_line >= (int)(textedit->linebreaks.size-1)) { return; }
 
     strview_t source = strview_of_buf(textedit->buffer);
-    strview_t string = source;
 
     int initial_scroll = int_max(0, from_real_line -1);
     int b = textedit->linebreaks.items[initial_scroll] +1; // byte
     int chunk_start = b;
     int line_counter = 0;
     int wrap_counter = 0;
-    int textOffsetX = 0;
+    int codepoint_count = 0;
 
     TexteditVisualLine_DynArr_clear_preserving_capacity(&textedit->visualblocks);
-
-    //textedit->first_visual_line_wrap_levels = 0;
-    //textedit->second_visual_line_wrap_levels = 0;
 
     for (;b <= source.size && line_counter < max_line_amount;) {
 
         int codepointByteCount = 0;
-        int codepoint = GetCodepointNext(&string.data[b], &codepointByteCount);
+        int codepoint = GetCodepointNext_woy(
+                &source.data[b], &codepointByteCount, source.size - b);
 
+        // new line or EOF
         if (codepoint == '\n' || b == source.size) {
             TexteditVisualLine_DynArr_insert(&textedit->visualblocks,
                 (TexteditVisualLine) {
@@ -432,18 +429,13 @@ void textedit__build_visual_lines(
 
             ++b; // skip codepoint
             chunk_start = b;
-            textOffsetX = 0;
+            codepoint_count = 0;
             ++line_counter;
             wrap_counter = 0;
             continue;
         }
-        if (textOffsetX == view_columns) {
-            //if (line_counter == 0) {
-                //++textedit->first_visual_line_wrap_levels;
-            //} else if (line_counter == 1) {
-                //++textedit->second_visual_line_wrap_levels;
-            //}
-
+        // max columns reached
+        if (codepoint_count == view_columns) {
             TexteditVisualLine_DynArr_insert(&textedit->visualblocks,
                 (TexteditVisualLine) {
                     .start = chunk_start,
@@ -454,12 +446,12 @@ void textedit__build_visual_lines(
             );
 
             chunk_start = b;
-            textOffsetX = 0;
+            codepoint_count = 0;
             ++wrap_counter;
             continue;
         }
-        ++textOffsetX;
-        ++b;
+        ++codepoint_count;
+        b += codepointByteCount;
     }
 }
 
@@ -528,15 +520,31 @@ void textedit__debug_draw(
     Font font, float font_size, float font_spacing
 ) {
     if (1) { // DEBUG LINE RENDERING
+        static strbuf_space_t(4096) _tmp_str = STRBUF_STATIC_INIT(4096);
+        strbuf_t *tmp_str = (strbuf_t*)(&_tmp_str);
+
         float line_spacing = 2;
         float line_height = font_size + line_spacing;
         strview_t source = strview_of_buf(textedit->buffer);
         for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
+            // Line
             TexteditVisualLine visual_line = textedit->visualblocks.items[i];
+            strview_t lineview = strview_sub(source, visual_line.start, visual_line.end);
             DrawTextEx_strview( font,
-                strview_sub(source, visual_line.start, visual_line.end),
+                lineview,
                 (Vector2) { pos.x, pos.y + (float)i * line_height },
                 font_size, font_spacing, line_spacing, BLACK);
+
+            // Extra info
+            int cp_len = utf8_codepoint_count(lineview.data, lineview.size);
+            strbuf_printf(&tmp_str, "i:%d size:%d cp_len:%d",
+                i, visual_line.end - visual_line.start, cp_len
+            );
+            DrawTextEx_strview( font,
+                strbuf_view(&tmp_str),
+                (Vector2) { pos.x + 200, pos.y + (float)i * line_height },
+                font_size, font_spacing, line_spacing, BLACK);
+
         }
         DrawRectangleLinesEx((Rectangle){
             pos.x, pos.y + (float)(textedit->visualline_corresponding_to_scroll)
@@ -578,13 +586,14 @@ void textedit__debug_draw(
         }
     }
 
-    if (1) {
-        int posx = 0;
-        int posy = 300;
+    if (0) { // DEBUG CODEPOINTS
+        int posx = (int)pos.x;
+        int posy = (int)pos.y + 300;
         DrawRectangle(posx, posy, font.texture.width, font.texture.height, BLACK);
         DrawTexture(font.texture, posx, posy, WHITE);
     }
 }
+
 
 void textedit_draw(
     Textedit *textedit, Rect2 view_rect,

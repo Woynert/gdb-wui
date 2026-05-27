@@ -32,6 +32,42 @@ void DrawTexture_flipped(Texture2D texture, int posX, int posY, Color tint)
     DrawTextureRec(texture, (Rectangle) { (float)posX, (float)posY, (float)texture.width, (float)-texture.height }, (Vector2) { 0, 0 }, tint);
 }
 
+// Defaults to '�'.
+#define CODEPOINT_NOT_FOUND 0xFFFD
+
+/*
+ * Extracted from rtext.c
+ * Fixes out of bounds read.
+ */
+int GetCodepointNext_woy(const char *text, int *codepointSize, int available_bytes) {
+    const char *ptr = text;
+    int codepoint = CODEPOINT_NOT_FOUND;
+    *codepointSize = 1;
+    if (text == NULL || available_bytes == 0) return codepoint;
+    if (0xf0 == (0xf8 & ptr[0]) && available_bytes >= 4) {
+        if (((ptr[1] & 0xC0) ^ 0x80) || ((ptr[2] & 0xC0) ^ 0x80) ||
+            ((ptr[3] & 0xC0) ^ 0x80)) { return codepoint; }
+        codepoint = ((0x07 & ptr[0]) << 18) | ((0x3f & ptr[1]) << 12)
+            | ((0x3f & ptr[2]) << 6) | (0x3f & ptr[3]);
+        *codepointSize = 4;
+    }
+    else if (0xe0 == (0xf0 & ptr[0]) && available_bytes >= 3) {
+        if (((ptr[1] & 0xC0) ^ 0x80) || ((ptr[2] & 0xC0) ^ 0x80)) { return codepoint; }
+        codepoint = ((0x0f & ptr[0]) << 12) | ((0x3f & ptr[1]) << 6) | (0x3f & ptr[2]);
+        *codepointSize = 3;
+    }
+    else if (0xc0 == (0xe0 & ptr[0]) && available_bytes >= 2) {
+        if ((ptr[1] & 0xC0) ^ 0x80) { return codepoint; }
+        codepoint = ((0x1f & ptr[0]) << 6) | (0x3f & ptr[1]);
+        *codepointSize = 2;
+    }
+    else if (0x00 == (0x80 & ptr[0])) {
+        codepoint = ptr[0];
+        *codepointSize = 1;
+    }
+    return codepoint;
+}
+
 /*
  * Extracted from rtext.c
  * Get index position for a unicode character on font, fallbacks to '�'
@@ -42,7 +78,7 @@ int GetGlyphIndex_woy(Font font, int codepoint) {
     int fallbackIndex = 0;
     for (int i = 0; i < font.glyphCount; i++)
     {
-        if (font.glyphs[i].value == 0x003F) fallbackIndex = i;
+        if (font.glyphs[i].value == CODEPOINT_NOT_FOUND) fallbackIndex = i;
 
         if (font.glyphs[i].value == codepoint)
         {
@@ -52,6 +88,37 @@ int GetGlyphIndex_woy(Font font, int codepoint) {
     }
     if ((index == 0) && (font.glyphs[0].value != codepoint)) index = fallbackIndex;
     return index;
+}
+
+/* @returns Codepoint count */
+int utf8_codepoint_count(const char *str, int size) {
+    int count = 0;
+    int codepoint_size = 0;
+    for (int i = 0; i < size;) {
+        GetCodepointNext_woy(&str[i], &codepoint_size, size-i);
+        i += codepoint_size;
+        ++count;
+    }
+    return count;
+}
+
+/*
+ * Extracted from rtext.c
+ */
+void DrawTextCodepoint_woy(Font font, int codepoint, Vector2 position, float fontSize, Color tint) {
+    int index = GetGlyphIndex_woy(font, codepoint);
+    float scaleFactor = fontSize/(float)font.baseSize;
+    Rectangle dstRec = {
+        position.x + (float)font.glyphs[index].offsetX*scaleFactor - (float)font.glyphPadding*scaleFactor,
+        position.y + (float)font.glyphs[index].offsetY*scaleFactor - (float)font.glyphPadding*scaleFactor,
+        (font.recs[index].width + 2.0f*(float)font.glyphPadding)*scaleFactor,
+        (font.recs[index].height + 2.0f*(float)font.glyphPadding)*scaleFactor };
+    Rectangle srcRec = {
+        font.recs[index].x - (float)font.glyphPadding,
+        font.recs[index].y - (float)font.glyphPadding,
+        font.recs[index].width + 2.0f*(float)font.glyphPadding,
+        font.recs[index].height + 2.0f*(float)font.glyphPadding };
+    DrawTexturePro(font.texture, srcRec, dstRec, (Vector2){ 0, 0 }, 0.0f, tint);
 }
 
 /*
@@ -69,15 +136,15 @@ void DrawTextEx_strview(
     for (int i = 0; i < string.size;)
     {
         int codepointByteCount = 0;
-        int codepoint = GetCodepointNext(&string.data[i], &codepointByteCount);
-        int index = GetGlyphIndex_woy(font, codepoint);
+        int codepoint = GetCodepointNext_woy(
+                &string.data[i], &codepointByteCount, string.size-i);
 
         if (codepoint == '\n') {
             textOffsetY += (fontSize + textLineSpacing);
             textOffsetX = 0.0f;
         } else {
             if ((codepoint != ' ') && (codepoint != '\t')) {
-                DrawTextCodepoint(
+                DrawTextCodepoint_woy(
                     font, codepoint,
                     (Vector2){
                         position.x + textOffsetX,
@@ -86,6 +153,7 @@ void DrawTextEx_strview(
                     fontSize, tint);
             }
 
+            int index = GetGlyphIndex_woy(font, codepoint);
             if (font.glyphs[index].advanceX == 0) {
                 textOffsetX += ((float)font.recs[index].width*scaleFactor + spacing);
             } else {
