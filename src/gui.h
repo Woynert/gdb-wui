@@ -87,30 +87,31 @@ void GUI_init_global_context(void) {
     GUI.font_spacing = 1;
     GUI.font_size = 15;
 
-    int_DynArr codepoints = int_DynArr_create();
-
     // Check ranges at (https://unicode.org/charts/nameslist/mainList.html).
-    int_DynArr_insert(&codepoints, 0xFFFD); // (�) codepoint
+    int ranges[] = {
+        32,      127,     // Basic latin
+        0x00A1,  0x00FF,  // C1 Controls and Latin-1 Supplement
+        0x0100,  0x017F,  // Latin Extended-A
+        0x0180,  0x024F,  // Latin Extended-B
+        0x1F300, 0x1F5FF, // Miscellaneous Symbols and Pictographs
+        0x1F600, 0x1F64F, // Emoticons
+    };
 
-    // Basic latin
-    for (int i=32; i <= 127; i++) { int_DynArr_insert(&codepoints, i); }
+    {
+        int_DynArr codepoints = int_DynArr_create();
+        int_DynArr_insert(&codepoints, 0xFFFD); // (�) codepoint
 
-    // 0080 | C1 Controls and Latin-1 Supplement | 00FF
-    // 0100 | Latin Extended-A                   | 017F
-    // 0180 | Latin Extended-B                   | 024F
-    for (int i=0x00A1; i <= 0x00FF; ++i) { int_DynArr_insert(&codepoints, i); }
-    for (int i=0x0100; i <= 0x017F; ++i) { int_DynArr_insert(&codepoints, i); }
-    for (int i=0x0180; i <= 0x024F; ++i) { int_DynArr_insert(&codepoints, i); }
+        for (int i = 0; i < (int)(sizeof(ranges)/sizeof(ranges[0])); i += 2) {
+            for (int j = ranges[i]; j <= ranges[i+1]; ++j) {
+                int_DynArr_insert(&codepoints, j);
+            }
+        }
 
-    // 1F300 | Miscellaneous Symbols and Pictographs | 1F5FF
-    // 1F600 | Emoticons                             | 1F64F
-    for (int i=0x1F300; i <= 0x1F5FF; ++i) { int_DynArr_insert(&codepoints, i); }
-    for (int i=0x1F600; i <= 0x1F64F; ++i) { int_DynArr_insert(&codepoints, i); }
-
-    GUI.font = LoadFontEx(
-        "assets/IosevkaFixed-Regular.ttf",
-        (int)GUI.font_size, codepoints.items, (int)codepoints.size);
-    int_DynArr_free(&codepoints);
+        GUI.font = LoadFontEx(
+            "assets/IosevkaFixed-Regular.ttf",
+            (int)GUI.font_size, codepoints.items, (int)codepoints.size);
+        int_DynArr_free(&codepoints);
+    }
     //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
 
     int w1 = (int)MeasureTextEx(GUI.font, "W",
