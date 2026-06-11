@@ -3,6 +3,7 @@
 
 #include "raylib.h"
 #include "strview.h"
+#include "stdio.h"
 
 typedef union Rect2 {
     struct {
@@ -70,6 +71,40 @@ int GetCodepointNext_woy(const char *text, int *codepointSize, int available_byt
 
 /*
  * Extracted from rtext.c
+ * @note Fixes out of bounds read.
+ */
+int GetCodepointPrev_woy(const char *buf, int *codepoint_size, int cursor)
+{
+    //const char *ptr = text;
+    int minimum_size = cursor;
+    int codepoint = CODEPOINT_NOT_FOUND;
+    *codepoint_size = 1;
+    if (buf == NULL) return codepoint;
+
+    // Move to previous codepoint
+    //do ptr--;
+    //while (((0x80 & ptr[0]) != 0) && ((0xc0 & ptr[0]) ==  0x80));
+
+    while (cursor >= 0) {
+        //if (((0x80 & buf[cursor]) != 0) && ((0xc0 & buf[cursor]) ==  0x80)) {
+        if (((0x80 & buf[cursor]) == 0) ||
+            ((0xc0 & buf[cursor]) != 0x80)) {
+            break;
+        }
+        --cursor;
+    }
+    printf("cursor %d\n", cursor);
+
+    //int cpSize = 0;
+    //codepoint = GetCodepointNext_woy(buf, &cpSize, initial_cursor);
+    //if (codepoint != 0) *codepoint_size = cpSize;
+
+    //return codepoint;
+    return GetCodepointNext_woy(&buf[cursor], codepoint_size, minimum_size-cursor+1);
+}
+
+/*
+ * Extracted from rtext.c
  * Get index position for a unicode character on font, fallbacks to '�'
  */
 int GetGlyphIndex_woy(Font font, int codepoint) {
@@ -100,6 +135,21 @@ int utf8_codepoint_count(const char *str, int size) {
         ++count;
     }
     return count;
+}
+
+/* @returns byte cursor. */
+int utf8_visually_nearest(const char *str, int size, int visual_char_count_target) {
+    int count = 0;
+    int codepoint_size = 0;
+    for (int i = 0; i < size;) {
+        if (count >= visual_char_count_target) {
+            return i;
+        }
+        GetCodepointNext_woy(&str[i], &codepoint_size, size-i);
+        i += codepoint_size;
+        ++count;
+    }
+    return size;
 }
 
 /*

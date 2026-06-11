@@ -190,7 +190,7 @@ void textedit__scroll_up(Textedit *textedit) {
     textedit->must_rebuild_visual_blocks = true;
 }
 
-void textedit__cursor_down(Textedit *textedit, int view_columns) {
+void textedit__cursor_down(Textedit *textedit) {
     if (textedit->cursor_visual_line == -1
         || textedit->cursor_visual_line +1 >= (int)textedit->visualblocks.size
         ) { return; }
@@ -204,9 +204,21 @@ void textedit__cursor_down(Textedit *textedit, int view_columns) {
         next_line.start + textedit->cursor - curr_line.start,
         next_line.end -1
     );
+
+    // For now: Snap to nearest codepoint to the left.
+    // Ideally: It should snap to the visually nearest.
+    // TODO: Wrap this magic numbers in a function or something.
+    const char *buf = textedit->buffer->cstr;
+    while (textedit->cursor >= 0) {
+        if (((0x80 & buf[textedit->cursor]) == 0) ||
+            ((0xc0 & buf[textedit->cursor]) != 0x80)) {
+            break;
+        }
+        --textedit->cursor;
+    }
 }
 
-void textedit__cursor_up(Textedit *textedit, int view_columns) {
+void textedit__cursor_up(Textedit *textedit) {
     if (textedit->cursor_visual_line -1 < 0) { return; }
 
     const TexteditVisualLine curr_line =
@@ -218,6 +230,15 @@ void textedit__cursor_up(Textedit *textedit, int view_columns) {
         prev_line.end -1,
         prev_line.start + textedit->cursor - curr_line.start
     );
+
+    const char *buf = textedit->buffer->cstr;
+    while (textedit->cursor >= 0) {
+        if (((0x80 & buf[textedit->cursor]) == 0) ||
+            ((0xc0 & buf[textedit->cursor]) != 0x80)) {
+            break;
+        }
+        --textedit->cursor;
+    }
 }
 
 void textedit__update_selection(Textedit *textedit, bool shift_pressed, int cursor_prev_pos) {
@@ -707,8 +728,9 @@ void textedit_draw(
         int chars_x, lines_y;
 
         line = textedit->visualblocks.items[visual_start];
-        chars_x = cursor_start - line.start;
         lines_y = visual_start - visualline_start;
+        chars_x = utf8_codepoint_count(
+            &textedit->buffer->cstr[line.start], cursor_start - line.start);
 
         float start_x = (float)(chars_x)
             * (font_width + font_spacing) + view_rect.x + number_padding;
@@ -716,8 +738,9 @@ void textedit_draw(
             * (font_size + line_spacing) + view_rect.y;
 
         line = textedit->visualblocks.items[visual_end];
-        chars_x = cursor_end - line.start;
         lines_y = visual_end - visualline_start;
+        chars_x = utf8_codepoint_count(
+            &textedit->buffer->cstr[line.start], cursor_end - line.start);
 
         float end_x = (float)(chars_x)
             * (font_width + font_spacing) + view_rect.x + number_padding;
@@ -756,14 +779,18 @@ void textedit_draw(
             }
         }
 
+        // draw selection end
         if (textedit->selection_visual_line < 0) { break; }
         line = textedit->visualblocks.items[textedit->selection_visual_line];
-        chars_x = textedit->selection_origin - line.start;
         lines_y = textedit->selection_visual_line - visualline_start;
-        start_x = (float)(chars_x)
-            * (font_width + font_spacing) + view_rect.x + number_padding;
-        start_y = (float)(lines_y)
-            * (font_size + line_spacing) + view_rect.y;
+        //chars_x = textedit->selection_origin - line.start;
+        chars_x = utf8_codepoint_count(
+                &textedit->buffer->cstr[line.start],
+                textedit->selection_origin - line.start);
+        start_x = view_rect.x + number_padding +
+            (float)(chars_x) * (font_width + font_spacing) -1;
+        start_y = view_rect.y +
+            (float)(lines_y) * (font_size + line_spacing);
         DrawRectangleRec((Rectangle) { start_x, start_y, 2, font_size }, RED);
     }
     } while(0);
@@ -808,6 +835,7 @@ void textedit_draw(
     }
 
     /* Draw cursor + blink */
+    /* TODO: Unify with selection cursor logic */
 
     double time_since = GetTime() - textedit->cursor_blink_timestamp_secs;
     if (time_since > 1) { textedit__reset_cursor_blink(textedit); }
@@ -817,8 +845,15 @@ void textedit_draw(
     ) {
         const TexteditVisualLine curr_line =
             textedit->visualblocks.items[textedit->cursor_visual_line];
-        int view_cursor_x = textedit->cursor - curr_line.start;
+        //const strview_t view_line = strview_sub(
+            //strbuf_view(&textedit->buffer), curr_line.start, curr_line.end);
+
         int view_cursor_y = textedit->cursor_visual_line - visualline_start;
+        //int view_cursor_x = utf8_codepoint_count(
+                //view_line.data, textedit->cursor - curr_line.start);
+        int view_cursor_x = utf8_codepoint_count(
+            &textedit->buffer->cstr[curr_line.start],
+            textedit->cursor - curr_line.start);
 
         DrawRectangleRec((Rectangle) {
             view_rect.x + number_padding +
@@ -847,7 +882,17 @@ void textedit_draw(
             prev_cursor = textedit->cursor;
             if (textedit->cursor > 0) {
                 if (control) { textedit__move_by_world(textedit, -1); }
-                else { --textedit->cursor; }
+                else {
+                    int codepoint_size = 0;
+                    //strview_t view = strview_sub(
+                        //strbuf_view(&textedit->buffer), 0, textedit->cursor);
+                    int codepoint = GetCodepointPrev_woy(
+                        textedit->buffer->cstr, &codepoint_size, textedit->cursor-1);
+                    //int codepoint = GetCodepointPrevious(view.data, &codepoint_size);
+                    //--textedit->cursor;
+                    textedit->cursor -= codepoint_size;
+                    printf("going left %d\n", codepoint);
+                }
             }
 
             textedit__update_selection(textedit, shift, prev_cursor);
@@ -858,7 +903,17 @@ void textedit_draw(
             prev_cursor = textedit->cursor;
             if (textedit->cursor < textedit->buffer->size) {
                 if (control) { textedit__move_by_world(textedit, +1); }
-                else { ++textedit->cursor; }
+                else {
+                    //textedit->buffer
+                    int codepoint_size = 0;
+                    strview_t view = strview_sub(
+                        strbuf_view(&textedit->buffer), textedit->cursor, INT_MAX);
+                    printf("cursor %d\n", textedit->cursor);
+                    int codepoint = GetCodepointNext_woy(view.data, &codepoint_size, view.size);
+                    //++textedit->cursor;
+                    textedit->cursor += codepoint_size;
+                    printf("going right %d\n", codepoint);
+                }
             }
 
             textedit__update_selection(textedit, shift, prev_cursor);
@@ -868,14 +923,14 @@ void textedit_draw(
         if (IsKeyPressed(KEY_DOWN)
         ) {
             prev_cursor = textedit->cursor;
-            textedit__cursor_down(textedit, view_columns);
+            textedit__cursor_down(textedit);
             textedit__update_selection(textedit, shift, prev_cursor);
             textedit->gofocus_cursor = true;
         }
 
         if (IsKeyPressed(KEY_UP)) {
             prev_cursor = textedit->cursor;
-            textedit__cursor_up(textedit, view_columns);
+            textedit__cursor_up(textedit);
             textedit__update_selection(textedit, shift, prev_cursor);
             textedit->gofocus_cursor = true;
         }
@@ -972,11 +1027,15 @@ void textedit_draw(
             float char_width = font_width + font_spacing;
             float mouse_x = mouse_pos.x - (view_rect.x + number_padding - char_width/2.f);
             float mouse_y = mouse_pos.y - (view_rect.y);
-            int mouse_x_char = (int)floorf(mouse_x / char_width);
+            int mouse_x_char_target = (int)floorf(mouse_x / char_width);
             int mouse_y_char = (int)floorf(mouse_y / line_height);
 
-            if (mouse_y_char < 0 || mouse_y_char > view_max_lines
-                || mouse_x_char < 0 || mouse_x_char > view_columns) {
+            //if (mouse_y_char < 0 || mouse_y_char > view_max_lines
+                //|| mouse_x_char < 0 || mouse_x_char > view_columns) {
+                //break;
+            //}
+
+            if (mouse_y_char < 0 || mouse_y_char > view_max_lines) {
                 break;
             }
 
@@ -987,10 +1046,15 @@ void textedit_draw(
             line_index = int_clamp(0, (int)textedit->visualblocks.size-1, line_index);
             TexteditVisualLine line = textedit->visualblocks.items[line_index];
 
-            textedit->cursor = int_max(0, int_min(
-                line.end -1,
-                line.start + mouse_x_char
-            ));
+
+            int mouse_x_char = utf8_visually_nearest(
+                &textedit->buffer->cstr[line.start], line.end - line.start, mouse_x_char_target);
+
+            textedit->cursor = int_clamp(0, line.end, line.start + mouse_x_char);
+                //int_max(0, int_min(
+                //line.end -1,
+                //line.start + mouse_x_char
+            //));
 
             textedit__reset_cursor_blink(textedit);
             textedit__update_selection(textedit, !first_press, prev_cursor);
@@ -1072,6 +1136,8 @@ void textedit_draw(
             }
         }
     }
+
+
 }
 
 #endif // !TEXTEDIT_H

@@ -16,7 +16,7 @@ static strview_t strview_of_buf(strbuf_t* buf) // TODO: Delete this or justify i
 }
 
 #define STRBUF_STATIC_INIT2(cap, strbuf) do { \
-    strbuf.buf.capacity=(cap); strbuf.buf.size=0; strbuf.buf.allocator.allocator=NULL; strbuf.buf.allocator.app_data=NULL; strbuf.bdy[0]=0; \
+    (strbuf).buf.capacity=(cap); (strbuf).buf.size=0; (strbuf).buf.allocator.allocator=NULL; (strbuf).buf.allocator.app_data=NULL; (strbuf).bdy[0]=0; \
 } while(0)
 
 void strbuf_recalculate_size_as_cstr(strbuf_t** buf_ptr) {
