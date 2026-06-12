@@ -59,7 +59,7 @@ def woy_locals() -> None:
         _woy_print_gdb_value(value, symbol.name)
 
 
-## @param exp_str GDB query expresion string
+## @param exp_str GDB query expresion string.
 ## @param page (Optional) >1 Pagination for large structs/arrays
 ##                        0 Default, no pagination, returns all
 ##

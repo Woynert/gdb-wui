@@ -2,6 +2,18 @@
 #include "stdio.h"
 
 /*
+ * Simple tree data structure.
+ *
+ * Nodes are stored in a flat array hierarchically. For example the tree:
+ *
+ * - 1
+ *    - 2
+ *        - 4
+ *    - 3
+ *
+ * Would be stored as: [1, 2, 4, 3].
+ * Inserting 5 under 4 would look like this: [1, 2, 4, 5, 3].
+ *
  * Usage:
  *
  * #define TREESI__TYPE <type>
@@ -9,77 +21,78 @@
  * #include "tree_simple.h"
  * #undef  TREESI__TYPE
  * #undef  TREESI__NAMESPACE
- *
- * Examples:
- *
- * #define TREESI__TYPE float
- * #include "tree_simple.h"
- * float_TreeSi tree = float_TreeSi_create();
- *
- * #define TREESI__TYPE int
- * #define TREESI__NAMESPACE IntTree
- * #include "tree_simple.h"
- * IntTree tree = IntTree_create();
 */
 
-/* user didn't specify type, using default */
+/* User didn't specify type, using default. */
 #ifndef TREESI__TYPE
-#define TREESI__TYPE uint
+#define TREESI__TYPE float
 #endif
 
-/* token concatenation */
+/* Token concatenation. */
 #define TREESI__TOKCAT_(a, b) a ## b
 #define TREESI__TOKCAT(a, b) TREESI__TOKCAT_(a, b)
 #ifndef TREESI__NAMESPACE
 #define TREESI__NAMESPACE TREESI__TOKCAT(TREESI__TYPE, _TreeSi)
 #endif
 #define TREESI__PRE(name) TREESI__TOKCAT(TREESI__TOKCAT(TREESI__NAMESPACE, _), name)
-/* use TREESI__PRE as namespace */
 
 typedef unsigned int uint;
 typedef struct {
     uint id;
     uint parent_id;
-    uint depth;
+    int depth;
     TREESI__TYPE item;
 } TREESI__PRE(Node);
 
-#define DYN_ARR_TYPE TREESI__PRE(Node)
-#undef DYN_ARR_PREFIX
+#define DYNA__TYPE TREESI__PRE(Node)
+#undef DYNA__PREFIX
 #include "da.h"
 
-#define PRE(name) TREESI__PRE(name)
+#define pfx(name) TREESI__PRE(name)
 #define TYPE TREESI__TYPE
 #define TreeSi TREESI__NAMESPACE
 
 typedef struct {
-    PRE(Node_DynArr) nodes;
+    pfx(Node_Dyna) nodes;
     uint id_counter;
 } TreeSi;
 
-static TreeSi PRE(create)(void) { // TODO: memory managment
+static TreeSi     pfx(create)     (void);
+static void       pfx(free)       (TreeSi *tree);
+static void       pfx(clear)      (TreeSi *tree);
+static bool       pfx(node_exists)(TreeSi *tree, uint node_id);
+static int        pfx(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item);
+static int        pfx(destroy_node_and_children)(TreeSi *tree, uint node_id);
+static void       pfx(print)      (TreeSi *tree);
+static pfx(Node) *pfx(_find_node) (TreeSi *tree, uint node_id, int *out_node_index);
+
+
+static TreeSi pfx(create)(void) {
     TreeSi tree = { 0 };
     tree.id_counter = 1;
-    tree.nodes = PRE(Node_DynArr_create)(); // TODO: check error
+    tree.nodes = pfx(Node_Dyna_create)(); /* @note: Can't fail. */
     return tree;
 }
 
-static void PRE(free)(TreeSi *tree) {
+
+static void pfx(free)(TreeSi *tree) {
     tree->id_counter = 0;
-    PRE(Node_DynArr_free)(&tree->nodes);
+    pfx(Node_Dyna_free)(&tree->nodes);
 }
 
-static void PRE(clear)(TreeSi *tree) {
+
+static void pfx(clear)(TreeSi *tree) {
     tree->id_counter = 0;
-    PRE(Node_DynArr_clear_preserving_capacity)(&tree->nodes);
+    pfx(Node_Dyna_clear_preserve)(&tree->nodes);
 }
+
 
 /*
    @param[out] out_node_index Optional
-   @returns PRE(Node) or NULL
+   @returns pfx(Node) or NULL
 */
-PRE(Node)* PRE(_find_node)(TreeSi *tree, uint node_id, uint *out_node_index) {
-    for (uint i = 0; i < tree->nodes.size; ++i) {
+pfx(Node) *pfx(_find_node)(TreeSi *tree, uint node_id, int *out_node_index) {
+    for (int i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
             if (out_node_index != NULL) {
                 *out_node_index = i;
@@ -90,8 +103,9 @@ PRE(Node)* PRE(_find_node)(TreeSi *tree, uint node_id, uint *out_node_index) {
     return NULL;
 }
 
-bool PRE(node_exists)(TreeSi *tree, uint node_id) {
-    for (uint i = 0; i < tree->nodes.size; ++i) {
+
+bool pfx(node_exists)(TreeSi *tree, uint node_id) {
+    for (int i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
             return true;
         }
@@ -99,25 +113,26 @@ bool PRE(node_exists)(TreeSi *tree, uint node_id) {
     return false;
 }
 
+
 /*
    @param parent_id. If 0 node will be added to root.
    @param[out] out_node_id Optional
    @returns error
 */
-int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
+int pfx(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
 {
-    PRE(Node) parent_node = { 0 };
-    uint parent_index = 0;
+    pfx(Node) parent_node = { 0 };
+    int parent_index = 0;
     bool has_parent = parent_id != 0;
 
     if (has_parent) {
-        // confirm parent exists
-        PRE(Node) *tmp = PRE(_find_node)(tree, parent_id, &parent_index);
+        // Confirm parent exists.
+        pfx(Node) *tmp = pfx(_find_node)(tree, parent_id, &parent_index);
         if (tmp == NULL) { return -1; }
         parent_node = *tmp;
     }
 
-    PRE(Node) node = {
+    pfx(Node) node = {
         .id = tree->id_counter,
         .parent_id = parent_id,
         .depth = has_parent ? parent_node.depth +1 : 0,
@@ -125,12 +140,12 @@ int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
     };
 
     if (has_parent) {
-        int error = PRE(Node_DynArr_insert_and_memmove_after)(
-                &tree->nodes, parent_index, node);
-        if (error != OK) { return error; }
+        int error = pfx(Node_Dyna_insert_at_preserve_order)(
+                &tree->nodes, parent_index +1, node);
+        if (error != 0) { return error; }
     }
     else {
-        PRE(Node_DynArr_insert)(&tree->nodes, node);
+        pfx(Node_Dyna_append)(&tree->nodes, node);
     }
 
     if (out_node_id != NULL) {
@@ -140,69 +155,61 @@ int PRE(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
     return 0;
 }
 
+
 /*
    @returns error
 */
-int PRE(destroy_node_and_children)(TreeSi *tree, uint node_id) {
-    uint node_index;
-    PRE(Node) *node;
+int pfx(destroy_node_and_children)(TreeSi *tree, uint node_id) {
+    int node_index;
+    pfx(Node) *node;
 
-    node = PRE(_find_node)(tree, node_id, &node_index);
+    node = pfx(_find_node)(tree, node_id, &node_index);
     if (node == NULL) { return -1; }
 
-    uint parent_depth = node->depth;
+    int parent_depth = node->depth;
 
     node = NULL;
-    int error = PRE(Node_DynArr_pop_and_memmove_at)(&tree->nodes, node_index);
-    if (error != OK) { return -2; };
+    int error = pfx(Node_Dyna_pop_at_preserve_order)(&tree->nodes, node_index);
+    if (error != 0) { return -2; };
 
-    // Not very efficient but good enough.
+    /* Not very efficient but good enough. Assumes order is hierarchical. */
     while(true) {
-        if (node_index >= tree->nodes.size) {
-            break;
-        }
+        if (node_index < 0 || node_index >= tree->nodes.size) { break; }
         node = &tree->nodes.items[node_index];
         if (node->depth > parent_depth) {
             node = NULL;
-            error = PRE(Node_DynArr_pop_and_memmove_at)(&tree->nodes, node_index);
-            if (error != OK) { return -3; };
+            error = pfx(Node_Dyna_pop_at_preserve_order)(&tree->nodes, node_index);
+            if (error != 0) { return -3; };
         }
         else break;
     }
 
-    return OK;
+    return 0;
 }
 
 
-//typedef struct {
-    //uint node_idx;
-    //PRE(Node)* node;
-//} TreeIterator;
-
-
-void PRE(print)(TreeSi *tree) {
+void pfx(print)(TreeSi *tree) {
     printf("------\n");
     if (tree->nodes.size == 0) {
         printf("[EMPTY TREE]\n");
         return;
     }
-    for (uint i = 0; i < tree->nodes.size; ++i) {
-        PRE(Node) *node = &tree->nodes.items[i];
-        for (uint k = 0; k < node->depth * 4; ++k) { printf(" "); }
+    for (int i = 0; i < tree->nodes.size; ++i) {
+        pfx(Node) *node = &tree->nodes.items[i];
+        for (int k = 0; k < node->depth * 4; ++k) { printf(" "); }
         printf("- %d\n", node->id);
     }
 }
 
 
-// don't undef: user generated
-// TREESI__TYPE
-// TREESI__NAMESPACE
 #undef TREESI__TOKCAT_
 #undef TREESI__TOKCAT
 #undef TREESI__PRE
-#undef DYN_ARR_TYPE
-#undef DYN_ARR_PREFIX
-#undef DA_PRE
-#undef PRE
+#undef DYNA__TYPE
+#undef DYNA__PREFIX
+#undef pfx
 #undef TYPE
 #undef TreeSi
+// Don't undef these since they are user generated:
+// TREESI__TYPE
+// TREESI__NAMESPACE

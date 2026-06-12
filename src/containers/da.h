@@ -1,62 +1,133 @@
-// Usage example:
-// #define DYN_ARR_TYPE uint
-// #undef  DYN_ARR_PREFIX            (optional)
-// #define DYN_ARR_PREFIX CustomName (optional)
-// #define DYN_ARR_ENABLE_SORT       (optional)
-// #include "da.h"
-
-// user didn't specify type, using default
-#ifndef DYN_ARR_TYPE
-#define DYN_ARR_TYPE uint
-#endif
-
-// token concatenation
-#define TOKCAT_(a, b) a ## b
-#define TOKCAT(a, b) TOKCAT_(a, b)
-
-#ifndef DYN_ARR_PREFIX
-#define DYN_ARR_PREFIX TOKCAT(DYN_ARR_TYPE, _)
-#endif
-
-#define PRE(name) TOKCAT(DYN_ARR_PREFIX, name)
-
-#define TYPE DYN_ARR_TYPE
-#define OK 0
-
+#include <limits.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
+/*
+ * Type safe dynamic array.
+ *
+ * Note: This container uses signed int for size and capacity variables. The
+ *     maximum size allowed is INT_MAX from "limits.h". Usually that's
+ *     2_147_483_647 items (0x7fffffff). For more info read:
+ *     https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1428r0.pdf
+ *
+ * Usage:
+ *
+ * #define DYNA__TYPE <type>
+ * #define DYNA__NAMESPACE <custom name> (optional)
+ * #define DYNA__ENABLE_COMPARISONS      (optional)
+ * #include "dyna.h"
+ * #undef  DYNA__TYPE
+ * #undef  DYNA__NAMESPACE
+ * #undef  DYNA__ENABLE_COMPARISONS
+*/
+
+/* User didn't specify type, using default. */
+#ifndef DYNA__TYPE
+#define DYNA__TYPE uint
+#define DYNA__ENABLE_COMPARISONS
+#endif
+
+/* Token concatenation. */
+#define DYNA__TOKCAT_(a, b) a ## b
+#define DYNA__TOKCAT(a, b) DYNA__TOKCAT_(a, b)
+#ifndef DYNA__NAMESPACE
+#define DYNA__NAMESPACE DYNA__TOKCAT(DYNA__TYPE, _Dyna)
+#endif
+#define pfx(name) DYNA__TOKCAT(DYNA__TOKCAT(DYNA__NAMESPACE, _), name)
+#define TYPE DYNA__TYPE
+#define Dyna DYNA__NAMESPACE
+
 typedef struct {
-    size_t size;
-    size_t capacity;
+    int capacity;
+    int size;
     TYPE *items;
-} PRE(DynArr);
+} Dyna;
+
+static Dyna  pfx(create)                      (void);
+static void  pfx(free)                        (Dyna *da);
+static int   pfx(resize)                      (Dyna *da, int new_capacity);
+static void  pfx(clear)                       (Dyna *da);
+static void  pfx(clear_preserve)              (Dyna *da);
+static int   pfx(append)                      (Dyna *da, TYPE item);
+static int   pfx(grow)                        (Dyna *da, int min_capacity);
+static void  pfx(fill)                        (Dyna *da);
+static void  pfx(fill_with_value)             (Dyna *da, TYPE item);
+static int   pfx(shrink)                      (Dyna *da);
+static int   pfx(insert_at_preserve_order)    (Dyna *da, int index, TYPE item);
+static int   pfx(remove_at)                   (Dyna *da, int index);
+static int   pfx(pop_at_preserve_order)       (Dyna *da, int index);
+static int   pfx(set)                         (Dyna *da, int index, TYPE item);
+static TYPE *pfx(get)                         (Dyna *da, int index);
+#ifdef DYNA__ENABLE_COMPARISONS
+static bool  pfx(has)                         (Dyna *da, TYPE value);
+static bool  pfx(find)                        (Dyna *da, TYPE value, int *out_index);
+static int   pfx(remove_first_instance)       (Dyna *da, TYPE value);
+static void  pfx(sort)                        (Dyna *r);
+static void  pfx(sort_range)                  (TYPE *buffer, int from, int to);
+typedef struct { int a; int b; } pfx(_Pair);
+static pfx(_Pair) pfx(_partition)             (TYPE *buffer, int from, int to);
+#endif // !DYNA__ENABLE_COMPARISONS
+static bool  pfx(_add_will_overflow_int)      (int a, int b);
+static int   pfx(_round_up_capacity)          (int capacity);
 
 
-static inline PRE(DynArr) PRE(DynArr_create) (void) {
-    PRE(DynArr) da = { 0 };
-    da.capacity = 2;
-    da.items = (TYPE *)malloc(sizeof(TYPE) * da.capacity);
-    return da;
+static inline Dyna pfx(create) (void) {
+    return (Dyna) { 0 };
 }
 
 
-static inline void PRE(DynArr_free) (PRE(DynArr) *da) {
+static inline void pfx(free) (Dyna *da) {
     if (da->items != NULL) {
         free(da->items);
-        da->items = NULL;
     }
+    *da = (Dyna) { 0 };
 }
 
 
-/// Inserts item at the back
-/// @param   item  Item passed as value
-/// @returns index
-static inline size_t PRE(DynArr_insert) (PRE(DynArr) *da, TYPE item) {
+/// @returns error
+static int pfx(resize) (Dyna *da, int new_capacity) {
+    if (new_capacity < 0) { return -1; }
+    if (da->capacity == new_capacity) { return 0; }
+
+    TYPE *new_ptr = NULL;
+
+    if (da->items == NULL) {
+        *da = (Dyna) { 0 };
+        new_ptr = (TYPE *)malloc(sizeof(TYPE) * (size_t)new_capacity);
+        if (new_ptr == NULL) { return -1; }
+    } else {
+        new_ptr = (TYPE *)realloc(da->items, sizeof(TYPE) * (size_t)new_capacity);
+        if (new_ptr == NULL) { return -1; }
+    }
+
+    da->capacity = new_capacity;
+    da->items = new_ptr;
+    return 0;
+}
+
+
+/// Appends item at the end.
+/// @returns index or -1.
+/// @reval   -1 Error.
+static inline int pfx(append) (Dyna *da, TYPE item) {
+    if (da->items == NULL) {
+        const int INITIAL_CAPACITY = 2;
+        if (pfx(resize)(da, INITIAL_CAPACITY) != 0) { return -1; }
+    }
+    else if (da->size >= da->capacity) {
+        int new_capacity =
+            pfx(_add_will_overflow_int(da->capacity, da->capacity)) ?
+                INT_MAX : da->capacity * 2;
+
+        if (pfx(resize)(da, new_capacity) != 0) { return -1; }
+
+        /* @note: Recommended grow ratio from 1.5 to 2.0. */
+        /* @note: What about a setting to cap grow at steps of say 500MB? */
+    }
     if (da->size >= da->capacity) {
-        da->capacity *= 2;
-        da->items = (TYPE *)realloc(da->items, sizeof(TYPE) * da->capacity);
+        return -1;
+        /* @note: Should only happen when already at full capacity INT_MAX.*/
     }
 
     da->items[da->size] = item;
@@ -65,116 +136,107 @@ static inline size_t PRE(DynArr_insert) (PRE(DynArr) *da, TYPE item) {
 }
 
 
-/// @returns error
-static int PRE(DynArr_overwrite_at) (PRE(DynArr) *da, size_t index, TYPE item) {
-    if (index >= da->size) {
-        return -1;
-    }
-    da->items[index] = item;
-    return OK;
+/* @returns Error */
+static inline int pfx(grow) (Dyna *da, int minimum_capacity) {
+    if (da->capacity >= minimum_capacity) { return 0; }
+    return pfx(resize)(da, minimum_capacity);
+    /*
+     * @note Maybe it could be useful to have an option to round_up_capacity
+     *     maybe in powers of 2 or something... Maybe even a configurable grow
+     *     ratio.
+     * int new_capacity = pfx(_round_up_capacity)(minimum_capacity);
+     */
 }
 
 
-/// @returns TYPE
-static TYPE *PRE(DynArr_get) (PRE(DynArr) *da, size_t index) {
+static int pfx(shrink) (Dyna *da) {
+    return pfx(resize)(da, da->size);
+}
+
+/* @note Fills with zeroes. */
+static void pfx(fill) (Dyna *da) {
+    da->size = da->capacity;
+    memset(da->items, 0, sizeof(TYPE) * (size_t)da->capacity);
+}
+
+static void pfx(fill_with_value) (Dyna *da, TYPE item) {
+    da->size = da->capacity;
+    for (int i = 0; i < da->capacity; ++i) {
+        da->items[i] = item;
+    }
+}
+
+
+/* @note You can directly access items instead too. */
+/* @returns Error. */
+static int pfx(set) (Dyna *da, int index, TYPE item) {
+    if (index < 0 || index >= da->size) { return -1; }
+    da->items[index] = item;
+    return 0;
+}
+
+
+/* @note You can directly access items instead too. */
+/* @returns Pointer or NULL. */
+static TYPE *pfx(get) (Dyna *da, int index) {
+    if (index < 0 || index >= da->size) { return NULL; }
     return &da->items[index];
 }
 
 
-static size_t PRE(DynArr_get_size) (PRE(DynArr) *da) {
-    return da->size;
-}
-
-
-/// Removing while iterating is Undefined Behaviour
-/// Removing will alter the order
-/// @retval  0 OK
-/// @retval -1 Not found
-static int PRE(DynArr_remove_at) (PRE(DynArr) *da, size_t index) {
-    if (index >= da->size){
-        return -1;
-    }
-
+/// Will alter the order.
+/// Removing while iterating is Undefined Behaviour.
+/// @returns error
+static int pfx(remove_at) (Dyna *da, int index) {
+    if (index < 0 || index >= da->size) { return -1; }
     da->items[index] = da->items[da->size -1];
     --da->size;
-    return OK;
+    return 0;
 }
 
 
-/// Clears the array erasing old memory
-static void PRE(DynArr_clear_reset) (PRE(DynArr) *da) {
-    da->size = 0;
-    da->capacity = 2;
-    da->items = (TYPE *)realloc(da->items, sizeof(TYPE) * da->capacity);
+/// Clears the array freeing old memory.
+static void pfx(clear) (Dyna *da) {
+    pfx(free)(da);
 }
 
 
-/// Clears the array but preserves the allocated memory
-static void PRE(DynArr_clear_preserving_capacity) (PRE(DynArr) *da) {
+/// Clears the array but preserves the allocated memory.
+static void pfx(clear_preserve) (Dyna *da) {
     da->size = 0;
 }
 
 
 /// @returns error
-static int PRE(DynArr_insert_and_memmove_at) (PRE(DynArr) *da, size_t index, TYPE item) {
-    if (index > da->size) {
+static int pfx(insert_at_preserve_order) (Dyna *da, int index, TYPE item) {
+    if (index < 0 || index > da->size) {
         return -1;
     }
-    PRE(DynArr_insert)(da, (TYPE){0}); // ensure space
-    memmove(da->items +index +1, da->items +index, sizeof(TYPE) * (da->size -1 -index));
+    pfx(append)(da, (TYPE){0}); // Ensure space.
+    memmove(da->items +index +1, da->items +index, sizeof(TYPE) * (size_t)(da->size -1 -index));
     da->items[index] = item;
-    return OK;
+    return 0;
 }
+
+
 /// @returns error
-static int PRE(DynArr_insert_and_memmove_after) (PRE(DynArr) *da, size_t index, TYPE item) {
-    return PRE(DynArr_insert_and_memmove_at)(da, index+1, item);
-}
-/// @returns error
-static int PRE(DynArr_pop_and_memmove_at) (PRE(DynArr) *da, size_t index) {
-    if (index > da->size) {
+static int pfx(pop_at_preserve_order) (Dyna *da, int index) {
+    if (index < 0 || index > da->size) {
         return -1;
     }
-    memmove(da->items +index, da->items +index +1, sizeof(TYPE) * (da->size -index));
+    memmove(da->items +index, da->items +index +1, sizeof(TYPE) * (size_t)(da->size -index));
     --da->size;
-    return OK;
+    return 0;
 }
 
 
-typedef struct {
-    size_t  __next_index;
-    size_t  index;
-    TYPE   *item;
-} PRE(DynArrIterator);
+#ifdef DYNA__ENABLE_COMPARISONS
 
+static pfx(_Pair) pfx(_partition) (TYPE *buffer, int from, int to) {
 
-/// @param[out] it iterator
-/// @retval  0 OK
-/// @retval -1 End reached
-static int PRE(DynArr_iterator_get_next) (PRE(DynArr) *da, PRE(DynArrIterator) *it)
-{
-    if (it->__next_index >= da->size) {
-        it->item = NULL;
-        return -1;
-    }
-
-    it->item = &da->items[it->__next_index];
-    it->index = it->__next_index;
-    ++it->__next_index;
-
-    return OK;
-}
-
-#ifdef DYN_ARR_ENABLE_SORT
-typedef struct {
-    size_t a;
-    size_t b;
-} PRE(DynArr_Pair);
-
-static PRE(DynArr_Pair) PRE(DynArr_partition) (TYPE *buffer, size_t from, size_t to) {
-
-    size_t left = from;
-    size_t eq = from;
-    size_t right = to;
+    int left = from;
+    int eq = from;
+    int right = to;
     TYPE pivot = buffer[(from + to) / 2];
 
     while (eq <= right) {
@@ -197,33 +259,29 @@ static PRE(DynArr_Pair) PRE(DynArr_partition) (TYPE *buffer, size_t from, size_t
         }
     }
 
-    return (PRE(DynArr_Pair)){left, right};
+    return (pfx(_Pair)){left, right};
 }
 
-static void PRE(DynArr_sort_range) (TYPE *buffer, size_t from, size_t to) {
+static void pfx(sort_range) (TYPE *buffer, int from, int to) {
     if (from >= 0 && from < to) {
-        PRE(DynArr_Pair) partition_index = PRE(DynArr_partition)(buffer, from, to);
+        pfx(_Pair) partition_index = pfx(_partition)(buffer, from, to);
         if (from +1 < partition_index.a) {
-            PRE(DynArr_sort_range) (buffer, from, partition_index.a -1);
+            pfx(sort_range) (buffer, from, partition_index.a -1);
         }
         if (partition_index.b +1 < to) {
-            PRE(DynArr_sort_range) (buffer, partition_index.b +1, to);
+            pfx(sort_range) (buffer, partition_index.b +1, to);
         }
     }
 }
 
-// sorts it and repositions head to latest
-static void PRE(DynArr_sort) (PRE(DynArr) *r) {
+static void pfx(sort) (Dyna *r) {
     if (r->size == 0) return;
-    PRE(DynArr_sort_range) (r->items, 0, r->size-1);
+    pfx(sort_range) (r->items, 0, r->size-1);
 }
 
-static bool PRE(DynArr_has) (PRE(DynArr) *da, TYPE value) {
-    for (size_t i = 0; i < da->size; ++i) {
-        TYPE *stored_value = PRE(DynArr_get)(da, i);
-        if (stored_value == NULL) {
-            continue;
-        }
+static bool pfx(has) (Dyna *da, TYPE value) {
+    for (int i = 0; i < da->size; ++i) {
+        TYPE *stored_value = &da->items[i];
         if (*stored_value == value) {
             return true;
         }
@@ -233,12 +291,9 @@ static bool PRE(DynArr_has) (PRE(DynArr) *da, TYPE value) {
 
 /// @param[out] out_index Item index if found
 /// @returns true if found
-static bool PRE(DynArr_find) (PRE(DynArr) *da, TYPE value, size_t *out_index) {
-    for (size_t i = 0; i < da->size; ++i) {
-        TYPE *stored_value = PRE(DynArr_get)(da, i);
-        if (stored_value == NULL) {
-            continue;
-        }
+static bool pfx(find) (Dyna *da, TYPE value, int *out_index) {
+    for (int i = 0; i < da->size; ++i) {
+        TYPE *stored_value = &da->items[i];
         if (*stored_value == value) {
             *out_index = i;
             return true;
@@ -248,23 +303,55 @@ static bool PRE(DynArr_find) (PRE(DynArr) *da, TYPE value, size_t *out_index) {
 }
 
 /// @returns error
-static int PRE(DynArr_remove_first_instance) (PRE(DynArr) *da, TYPE value) {
-    size_t item_index = 0;
-    bool found = PRE(DynArr_find)(da, value, &item_index);
+static int pfx(remove_first_instance) (Dyna *da, TYPE value) {
+    int item_index = 0;
+    bool found = pfx(find)(da, value, &item_index);
     if (!found) {
         return -1;
     }
-    PRE(DynArr_remove_at)(da, item_index);
-    return OK;
+    pfx(remove_at)(da, item_index);
+    return 0;
+}
+
+#endif // !DYNA__ENABLE_COMPARISONS
+
+
+/* @note Extracted from the excellent mickjc750/str. */
+static bool pfx(_add_will_overflow_int) (int a, int b) {
+    int c = a;
+    c += b;
+    return ((a < 0) == (b < 0) && (a < 0) != (c < 0));
 }
 
 
-#endif // !DYN_ARR_ENABLE_SORT
+/*
+ * @note Extracted from the excellent mickjc750/str.
+ * @note The buffer size can only ever be shrunk by calling shrink(), which
+ *       shrinks it to the minimum needed. Higher values will reduce calls to the
+ *       allocator, at the expense of more memory overhead.
+ * @note The buffer capacity is rounded up to a multiple of this when
+ *       calling grow().
+ */
+static int pfx(_round_up_capacity) (int capacity) {
+    const int CAPACITY_GROW_STEP = 16;
+    int remainder = capacity % CAPACITY_GROW_STEP;
+    if (remainder) {
+        if (!pfx(_add_will_overflow_int)(capacity, CAPACITY_GROW_STEP -remainder)) {
+            capacity += CAPACITY_GROW_STEP -remainder;
+        } else {
+            capacity = INT_MAX;
+        }
+    }
+    return capacity;
+}
 
 
-#undef PRE
-#undef DYN_ARR_ENABLE_SORT
+#undef DYNA__TOKCAT_
+#undef DYNA__TOKCAT
+#undef pfx
 #undef TYPE
-// don't undef: user generated
-// DYN_ARR_TYPE
-// DYN_ARR_PREFIX
+#undef Dyna
+// Don't undef these since they are user generated:
+// DYNA__TYPE
+// DYNA__PREFIX
+// DYNA__ENABLE_COMPARISONS

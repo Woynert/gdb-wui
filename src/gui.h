@@ -98,19 +98,19 @@ void GUI_init_global_context(void) {
     };
 
     {
-        int_DynArr codepoints = int_DynArr_create();
-        int_DynArr_insert(&codepoints, 0xFFFD); // (�) codepoint
+        int_Dyna codepoints = int_Dyna_create();
+        int_Dyna_append(&codepoints, 0xFFFD); // (�) codepoint
 
         for (int i = 0; i < (int)(sizeof(ranges)/sizeof(ranges[0])); i += 2) {
             for (int j = ranges[i]; j <= ranges[i+1]; ++j) {
-                int_DynArr_insert(&codepoints, j);
+                int_Dyna_append(&codepoints, j);
             }
         }
 
         GUI.font = LoadFontEx(
             "assets/IosevkaFixed-Regular.ttf",
             (int)GUI.font_size, codepoints.items, (int)codepoints.size);
-        int_DynArr_free(&codepoints);
+        int_Dyna_free(&codepoints);
     }
     //SetTextureFilter(draw_ctx.font.texture, TEXTURE_FILTER_POINT);
 
@@ -195,7 +195,7 @@ void GuiBreakpointView_draw(WuiState *state, Rect2 view_rect) {
     DrawRectangleRec(view_rect.rect, GRAY);
 
     float line_height = GUI.font_size + 2;
-    for (size_t i = 0; i < state->breakpoints.size; ++i) {
+    for (int i = 0; i < state->breakpoints.size; ++i) {
         WuiBreakpoint *breakpoint = &state->breakpoints.items[i];
 
         strbuf_printf(&gui_str, "%d%s %s %s",
@@ -215,7 +215,7 @@ void GuiBreakpointView_draw(WuiState *state, Rect2 view_rect) {
     // Open context menu.
 
     if (CheckCollisionPointRec(GetMousePosition(), view_rect.rect)
-        && IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)
+        && BetterMouse_is_pressed(MOUSE_BUTTON_RIGHT)
     ) {
         printf("Clicked!\n");
         GUI_open_context_menu(cstr(
@@ -272,7 +272,7 @@ void GUI_draw_popups(void) {
 
         DrawRectangleLinesEx(rect.rect, 1, BLACK);
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (BetterMouse_is_pressed(MOUSE_BUTTON_LEFT)) {
             printf("Pressed option %d\n", hover_option_id);
             GUI_close_popup(hover_option_id);
         }

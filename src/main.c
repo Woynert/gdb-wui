@@ -51,6 +51,8 @@ int main (void) {
     error = IPC_launch_gdb(&ipc_ctx);
     ASSERT(error == 0);
 
+    // Insert custom script.
+
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
     error = IPC_write_cmd(&ipc_ctx, cstr("python\n"));
     error = IPC_write_cmd(&ipc_ctx, python_code_view);

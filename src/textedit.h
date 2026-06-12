@@ -13,20 +13,18 @@
 #include "portable_utils.h"
 #include "better_mouse_input.h"
 
-#ifndef DYN_ARR_TYPE_UINT
-#define DYN_ARR_TYPE_UINT
-#define DYN_ARR_TYPE uint
-#undef  DYN_ARR_PREFIX
+#ifndef DYNA__TYPE_UINT
+#define DYNA__TYPE_UINT
+#define DYNA__TYPE uint
 #include "containers/da.h"
-#undef  DYN_ARR_TYPE
+#undef DYNA__TYPE
 #endif
 
-#ifndef DYN_ARR_TYPE_INT
-#define DYN_ARR_TYPE_INT
-#define DYN_ARR_TYPE int
-#undef  DYN_ARR_PREFIX
+#ifndef DYNA__TYPE_INT
+#define DYNA__TYPE_INT
+#define DYNA__TYPE int
 #include "containers/da.h"
-#undef  DYN_ARR_TYPE
+#undef DYNA__TYPE
 #endif
 
 typedef struct Textedit_Change {
@@ -48,10 +46,9 @@ typedef struct TexteditVisualLine {
     int wrap;  /* visual line wrap count */
 } TexteditVisualLine;
 
-#define DYN_ARR_TYPE TexteditVisualLine
-#undef  DYN_ARR_PREFIX
+#define DYNA__TYPE TexteditVisualLine
 #include "containers/da.h"
-#undef  DYN_ARR_TYPE
+#undef DYNA__TYPE
 
 #define TEXTEDIT_LOG_SIZE 256
 
@@ -69,8 +66,8 @@ typedef struct Textedit {
     bool is_selecting;
     int selection_origin;
     strbuf_t *buffer; // grows as needed (it's cleared on close (manually))
-    int_DynArr linebreaks; /* Todo: Mark linebreaks as dirty. */
-    TexteditVisualLine_DynArr visualblocks; 
+    int_Dyna linebreaks; /* Todo: Mark linebreaks as dirty. */
+    TexteditVisualLine_Dyna visualblocks; 
     int line_amount;
     Textedit_Log editlog;
     /* cached */
@@ -89,8 +86,8 @@ typedef struct Textedit {
 void textedit_init(Textedit *textedit) {
     *textedit = (Textedit) { 0 };
     textedit->buffer = strbuf_create(0, NULL);
-    textedit->linebreaks = int_DynArr_create();
-    textedit->visualblocks = TexteditVisualLine_DynArr_create();
+    textedit->linebreaks = int_Dyna_create();
+    textedit->visualblocks = TexteditVisualLine_Dyna_create();
 
     textedit->editlog.ring = TexteditRing_create(TEXTEDIT_LOG_SIZE);
     for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
@@ -100,8 +97,8 @@ void textedit_init(Textedit *textedit) {
 
 void textedit_free(Textedit *textedit) {
     strbuf_destroy(&textedit->buffer);
-    int_DynArr_free(&textedit->linebreaks);
-    TexteditVisualLine_DynArr_free(&textedit->visualblocks);
+    int_Dyna_free(&textedit->linebreaks);
+    TexteditVisualLine_Dyna_free(&textedit->visualblocks);
 
     for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
         strbuf_destroy(&textedit->editlog.ring.buffer[i].buffer);
@@ -114,15 +111,15 @@ void textedit_free(Textedit *textedit) {
 void textedit__update_linebreaks(Textedit *textedit, int startindex) {
     strview_t buffer = strview_of_buf(textedit->buffer);
     if (startindex >= buffer.size) { startindex = 0; };
-    int_DynArr_clear_preserving_capacity(&textedit->linebreaks);
+    int_Dyna_clear_preserve(&textedit->linebreaks);
 
-    int_DynArr_insert(&textedit->linebreaks, -1);
+    int_Dyna_append(&textedit->linebreaks, -1);
     for (int i = startindex; i < textedit->buffer->size; ++i) {
         if (buffer.data[i] == '\n') {
-            int_DynArr_insert(&textedit->linebreaks, i);
+            int_Dyna_append(&textedit->linebreaks, i);
         }
     }
-    int_DynArr_insert(&textedit->linebreaks, textedit->buffer->size);
+    int_Dyna_append(&textedit->linebreaks, textedit->buffer->size);
     textedit->line_amount = (int)textedit->linebreaks.size -2;
 }
 
@@ -429,7 +426,7 @@ void textedit__build_visual_lines(
     int wrap_counter = 0;
     int codepoint_count = 0;
 
-    TexteditVisualLine_DynArr_clear_preserving_capacity(&textedit->visualblocks);
+    TexteditVisualLine_Dyna_clear_preserve(&textedit->visualblocks);
 
     for (;b <= source.size && line_counter < max_line_amount;) {
 
@@ -439,7 +436,7 @@ void textedit__build_visual_lines(
 
         // new line or EOF
         if (codepoint == '\n' || b == source.size) {
-            TexteditVisualLine_DynArr_insert(&textedit->visualblocks,
+            TexteditVisualLine_Dyna_append(&textedit->visualblocks,
                 (TexteditVisualLine) {
                     .start = chunk_start,
                     .end   = b +1,
@@ -457,7 +454,7 @@ void textedit__build_visual_lines(
         }
         // max columns reached
         if (codepoint_count == view_columns) {
-            TexteditVisualLine_DynArr_insert(&textedit->visualblocks,
+            TexteditVisualLine_Dyna_append(&textedit->visualblocks,
                 (TexteditVisualLine) {
                     .start = chunk_start,
                     .end   = b,
@@ -1089,9 +1086,9 @@ void textedit_draw(
         // Get cursor line + direction
 
         int cursor_line = -1;
-        for (size_t i = 0; i < textedit->linebreaks.size; ++i) {
+        for (int i = 0; i < textedit->linebreaks.size; ++i) {
             if (textedit->cursor > (int)textedit->linebreaks.items[i]) {
-                cursor_line = (int)i-1;
+                cursor_line = i-1;
             } else { break; }
         }
         ++cursor_line;

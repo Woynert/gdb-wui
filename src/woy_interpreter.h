@@ -59,7 +59,7 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
    uint cases = strnum_u32(line, 0, STRNUM_DEFAULT);
    printf("\ncases %d\n", cases);
 
-   WuiBreakpoint_DynArr_clear_preserving_capacity(&wui_state->breakpoints);
+   WuiBreakpoint_Dyna_clear_preserve(&wui_state->breakpoints);
 
    for (uint i = 0; i < cases; ++i) {
       WuiBreakpoint breakpoint;
@@ -78,7 +78,7 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
       tmp = &breakpoint.file;
       strbuf_assign(&tmp, file);
 
-      WuiBreakpoint_DynArr_insert(&wui_state->breakpoints, breakpoint);
+      WuiBreakpoint_Dyna_append(&wui_state->breakpoints, breakpoint);
 
       printf("id %d type %d enabled %s loc %s file %s line %d\n",
             breakpoint.id, breakpoint.type, PRIbool(breakpoint.enabled),

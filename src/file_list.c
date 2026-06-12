@@ -37,7 +37,7 @@ int main (void) {
 
     int error = FileExplorer_list_path(&file_explorer, cstr(file_explorer.curr_path.cstr));
     printf("%d\n", error);
-    ASSERT(error == OK);
+    ASSERT(error == 0);
     File selected_file = { 0 };
 
     while (!WindowShouldClose()) // Detect window close button or ESC key

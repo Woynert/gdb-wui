@@ -63,9 +63,9 @@ void WuiSymbol_init (WuiSymbol *wui_symbol) {
 }
 
 
-#define DYN_ARR_TYPE WuiBreakpoint
+#define DYNA__TYPE WuiBreakpoint
 #include "./containers/da.h"
-#undef DYN_ARR_TYPE
+#undef DYNA__TYPE
 
 #define TREESI__TYPE WuiSymbol
 #define TREESI__NAMESPACE SymbolTree
@@ -74,17 +74,17 @@ void WuiSymbol_init (WuiSymbol *wui_symbol) {
 #undef  TREESI__NAMESPACE
 
 typedef struct WuiState {
-    WuiBreakpoint_DynArr breakpoints;
+    WuiBreakpoint_Dyna breakpoints;
     SymbolTree symbol_tree;
 } WuiState;
 
 void WuiState_init (WuiState *wui_state) {
-    wui_state->breakpoints = WuiBreakpoint_DynArr_create();
+    wui_state->breakpoints = WuiBreakpoint_Dyna_create();
     wui_state->symbol_tree = SymbolTree_create();
 }
 
 void WuiState_free (WuiState *wui_state) {
-    WuiBreakpoint_DynArr_free(&wui_state->breakpoints);
+    WuiBreakpoint_Dyna_free(&wui_state->breakpoints);
     SymbolTree_free(&wui_state->symbol_tree);
 }
 

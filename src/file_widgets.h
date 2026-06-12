@@ -34,16 +34,16 @@ File File_create(void) {
     return file;
 }
 
-#define DYN_ARR_TYPE File
+#define DYNA__TYPE File
 #include "./containers/da.h"
-#undef DYN_ARR_TYPE
+#undef DYNA__TYPE
 
 typedef struct FileExplorer {
     union {
         strbuf_space_t(MAX_FILEPATH_LENGTH) _curr_path;
         strbuf_t curr_path;
     };
-    File_DynArr files_dyna;
+    File_Dyna files_dyna;
     // gui vars:
     float scroll;
     int scroll_line;
@@ -52,13 +52,13 @@ typedef struct FileExplorer {
 FileExplorer FileExplorer_create(void) {
     FileExplorer file_explorer = { 0 };
     STRBUF_STATIC_INIT2(MAX_FILEPATH_LENGTH, file_explorer._curr_path);
-    file_explorer.files_dyna = File_DynArr_create();
+    file_explorer.files_dyna = File_Dyna_create();
     return file_explorer;
 }
 
-#define DYN_ARR_TYPE strview_t
+#define DYNA__TYPE strview_t
 #include "./containers/da.h"
-#undef DYN_ARR_TYPE
+#undef DYNA__TYPE
 
 typedef struct FileViewer {
     union {
@@ -66,7 +66,7 @@ typedef struct FileViewer {
         strbuf_t file_path;
     };
     strbuf_t *file_data;
-    strview_t_DynArr lines;
+    strview_t_Dyna lines;
     // gui vars:
     float scroll;
     int scroll_line;
@@ -131,7 +131,7 @@ FileViewer FileViewer_create(void) {
     FileViewer viewer = { 0 };
     STRBUF_STATIC_INIT2(MAX_FILEPATH_LENGTH, viewer._file_path);
     viewer.file_data = strbuf_create_empty(0, NULL);
-    viewer.lines = strview_t_DynArr_create();
+    viewer.lines = strview_t_Dyna_create();
     return viewer;
 }
 
@@ -142,7 +142,7 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
         return -1;
     }
 
-    File_DynArr_clear_preserving_capacity(&file_explorer->files_dyna);
+    File_Dyna_clear_preserve(&file_explorer->files_dyna);
 
     {
         strbuf_t *file_explorer_curr_path = &file_explorer->curr_path;
@@ -150,7 +150,7 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
     }
     printf("%s\n", file_explorer->curr_path.cstr);
 
-    File_DynArr *files_dyna = &file_explorer->files_dyna;
+    File_Dyna *files_dyna = &file_explorer->files_dyna;
     FilePathList file_list = LoadDirectoryFiles(path->cstr);
 
     {
@@ -161,7 +161,7 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
             strbuf_t *file_path = &file.path;
             strbuf_assign(&file_path, cstr(".."));
         }
-        File_DynArr_insert(files_dyna, file);
+        File_Dyna_append(files_dyna, file);
     }
 
     for (uint i = 0; i < file_list.count; i++) { // directories
@@ -177,7 +177,7 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
             strbuf_t *file_path = &file.path;
             strbuf_assign(&file_path, basename);
         }
-        File_DynArr_insert(files_dyna, file);
+        File_Dyna_append(files_dyna, file);
     }
     for (uint i = 0; i < file_list.count; i++) { // files
         if (!IsPathFile(file_list.paths[i])) continue;
@@ -192,18 +192,18 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
             strbuf_t *file_path = &file.path;
             strbuf_assign(&file_path, basename);
         }
-        File_DynArr_insert(files_dyna, file);
+        File_Dyna_append(files_dyna, file);
     }
 
-    File_DynArrIterator it = { 0 };
-    while (File_DynArr_iterator_get_next(files_dyna, &it) == OK) {
+    for (int i = 0; i < files_dyna->size; ++i) {
+        File *item = &files_dyna->items[i];
         printf("%s %s\n",
-                it.item->path.cstr,
-                it.item->is_file ? "FILE" : "DIR");
+                item->path.cstr,
+                item->is_file ? "FILE" : "DIR");
     }
 
     UnloadDirectoryFiles(file_list);
-    return OK;
+    return 0;
 }
 
 
@@ -274,14 +274,14 @@ bool FileExplorer_render(
     btn_rect.height = (float)line_height;
     btn_rect.width -= scrollbar_width + 2;
 
-    int line_count = (int)File_DynArr_get_size(&file_explorer->files_dyna);
+    int line_count = file_explorer->files_dyna.size;
     int screen_line_capacity = (int)floorf(panel_rect.height / (float)line_height);
     int from_line = int_clamp(0, line_count, file_explorer->scroll_line);
     int to_line = int_clamp(
             from_line, line_count, from_line + screen_line_capacity);
 
     for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
-        File *file = File_DynArr_get(&file_explorer->files_dyna, (size_t)i);
+        File *file = File_Dyna_get(&file_explorer->files_dyna, i);
         if (file == NULL) continue;
 
         // mouse interaction
@@ -384,19 +384,19 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
 
         strview_t line_reader = strbuf_view(&viewer->file_data);
         strview_t line = { 0 };
-        strview_t_DynArr_clear_preserving_capacity(&viewer->lines);
+        strview_t_Dyna_clear_preserve(&viewer->lines);
         viewer->scroll_line = 0;
         viewer->scroll = 0;
 
         do {
             line = strview_split_first_delim(&line_reader, "\n", true);
-            strview_t_DynArr_insert(&viewer->lines, line);
+            strview_t_Dyna_append(&viewer->lines, line);
             printf("(%d) %"PRIstr"\n", line.size, PRIstrarg(line));
         }
         while (line_reader.size > 0 || !strview_is_valid(line));
 
         printf("DEBUG: Succesfully loaded file\n");
-        return_error = OK;
+        return_error = 0;
     } while (0);
 
     strbuf_destroy(&path);
@@ -410,7 +410,7 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
 
     int line_height = DRAW_CTX.font_size - 1;
     int screen_line_capacity = (int)floorf(panel_rect.height / (float)line_height);
-    int line_count = (int)strview_t_DynArr_get_size(&file_viewer->lines);
+    int line_count = file_viewer->lines.size;
 
     // Draw text
 
@@ -422,7 +422,7 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
     strbuf_assign(&aux_file_str, cstr(""));
 
     for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
-        strview_t *line = strview_t_DynArr_get(&file_viewer->lines, (size_t)i);
+        strview_t *line = strview_t_Dyna_get(&file_viewer->lines, i);
         if (line == NULL) continue;
 
         strbuf_assign(&aux_file_str, *line);
