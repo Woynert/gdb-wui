@@ -41,7 +41,7 @@ struct {
     Font font;
     float font_size;
     float font_width;
-    float font_spacing;
+    float font_spacing; /* Space between chars. */
 
     RenderTexture2D aux_texture;
     RenderTexture2D final_texture;
@@ -228,11 +228,94 @@ void GuiBreakpointView_draw(WuiState *state, Rect2 view_rect) {
     }
 }
 
+bool GUI__symbol_is_expandable(int symbol_type) {
+    return symbol_type == SYMBOL_TYPE_STRUCT;
+    /* Symbol is ARRAY o pointer to STRUCT. */
+}
+
+void GUI_draw_symbol_tree(SymbolTree *tree, Rect2 view_rect) {
+    BeginTextureMode(GUI.aux_texture);
+    DrawRectangleRec(view_rect.rect, GRAY);
+
+    const float LINE_HEIGHT = GUI.font_size;
+    const float PAD = 5;
+    const int col_width = (int)(GUI.font_width + GUI.font_spacing);
+    const int max_cols = (int)(view_rect.width - PAD * 2) / col_width;
+    Vector2 text_pos = { view_rect.x + PAD, view_rect.y };
+    Rect2 selectable_area = {{ view_rect.x, text_pos.y, view_rect.width, LINE_HEIGHT }};
+
+    SymbolTree_Iterator it = { 0 };
+    while(SymbolTree_get_next(tree, &it)) {
+        WuiSymbol *symbol = it.item;
+
+        strbuf_printf(&gui_str, "%s%s = %s",
+            GUI__symbol_is_expandable(symbol->basic_type) ? "> " : "  ",
+            symbol->symbol_name.cstr,
+            symbol->value.cstr
+        );
+        int prev_size = gui_str->size;
+        strbuf_append_printf(&gui_str, "%s%s",
+            symbol->type_name.cstr,
+            symbol->basic_type == SYMBOL_TYPE_PTR ? " [pointer]" : ""
+        );
+        strview_t line1 = {
+            .data = gui_str->cstr,
+            .size = prev_size,
+        };
+        strview_t line2 = {
+            .data = line1.data + line1.size,
+            .size = gui_str->size - line1.size,
+        };
+
+        int cols = utf8_codepoint_count_strview(line1);
+        int type_cols = utf8_codepoint_count_strview(line2);
+        bool it_all_fits = (max_cols - cols) >= type_cols;
+        float prev_x = text_pos.x;
+
+        /* Mouse hovering. */
+
+        selectable_area.height = LINE_HEIGHT * (it_all_fits ? 1 : 2);
+        Color selectable_area_color;
+
+        if (CheckCollisionPointRec(GetMousePosition(), selectable_area.rect)) {
+            selectable_area_color = BLUE;
+        } else {
+            selectable_area_color = (it.index % 2) == 0 ? GOLD : ORANGE;
+        }
+        DrawRectangleRec(selectable_area.rect, selectable_area_color);
+
+        /* General info. */
+
+        DrawTextEx_strview(GUI.font, line1, text_pos, GUI.font_size, GUI.font_spacing, 0, BLACK);
+
+        /* Data type. */
+
+        text_pos.x = view_rect.x + view_rect.width - PAD - (float)(type_cols * col_width);
+        if (!it_all_fits) {
+            text_pos.y += LINE_HEIGHT;
+        }
+
+        DrawTextEx_strview(GUI.font, line2, text_pos, GUI.font_size, GUI.font_spacing, 0, DARKGRAY);
+
+        text_pos.x = prev_x;
+        text_pos.y += LINE_HEIGHT;
+        selectable_area.y = text_pos.y;
+    }
+
+    DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
+    EndTextureMode();
+}
+
+
+void GUI_draw_locals(WuiState *state, Rect2 view_rect) {
+    GUI_draw_symbol_tree(&state->locals, view_rect);
+}
+
 void GUI_draw_popups(void) {
     if (GUI.curr_popup == POPUP_NONE) { return; }
     else if (GUI.curr_popup == POPUP_CONTEXT_MENU) {
         Vector2 mouse = GetMousePosition();
-        strview_t all_lines = strview_of_buf(&GUI.context_menu.options);
+        strview_t all_lines = strbuf_view2(&GUI.context_menu.options);
         strview_t line = { 0 };
         int line_height = (int)GUI.font_size + GUI_POPUP_PAD;
         Rect2 rect = {{
@@ -289,8 +372,16 @@ void GUI_draw_all(WuiState *state) {
 
     // Breakpoint
 
-    view_rect = (Rect2) {{ 20, 250, 120, 120 }};
+    view_rect = (Rect2) {{ 20, 10, 200, 120 }};
     GuiBreakpointView_draw(state, view_rect);
+    BeginTextureMode(GUI.final_texture);
+        DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
+    EndTextureMode();
+
+    // Locals
+
+    view_rect = (Rect2) {{ 20, 500, 500, 300 }};
+    GUI_draw_locals(state, view_rect);
     BeginTextureMode(GUI.final_texture);
         DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
     EndTextureMode();
@@ -310,18 +401,9 @@ void GUI_draw_all(WuiState *state) {
         DrawTexture_flipped(GUI.final_texture.texture, 0, 0, WHITE);
         DrawFPS(0,0);
 
-        Rectangle btn = { 20, 20, 300, 20 };
-        if (GuiButton(btn, "Press Me!")) {
-            printf("Thank you\n");
-        }
-        btn.y += btn.height;
-        if (GuiButton(btn, "Press Me Too!")) {
-            printf("Thank you twise\n");
-        }
-
         GUI_draw_popups();
 
-        view_rect = (Rect2) {{ 150, 150, 187, 150 }};
+        view_rect = (Rect2) {{ 250, 300, 187, 150 }};
         textedit_draw(&GUI.textedit, view_rect, GUI.font, GUI.font_size,
                 GUI.font_spacing, GUI.font_width);
 

@@ -31,11 +31,16 @@ void WuiBreakpoint_init (WuiBreakpoint *bp) {
     STRBUF_STATIC_INIT2(WUI_BREAKPOINT_STR_SIZE, bp->_file);
 }
 
+/* See gdb_woy_api.py. */
+#define SYMBOL_TYPE_PTR    1
+#define SYMBOL_TYPE_ARRAY  2
+#define SYMBOL_TYPE_STRUCT 3
+#define SYMBOL_TYPE_FUNC   7
 
 #define WUI_SYMBOL_VALUE_STR_SIZE 100
 
 typedef struct WuiSymbol {
-    uint basic_type;
+    int basic_type;
     union {
         strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _type_name;
         strbuf_t type_name;
@@ -75,7 +80,8 @@ void WuiSymbol_init (WuiSymbol *wui_symbol) {
 
 typedef struct WuiState {
     WuiBreakpoint_Dyna breakpoints;
-    SymbolTree symbol_tree;
+    SymbolTree locals;
+
     bool has_valid_location; /* Guards current file path and line. */
     strbuf_t *curr_file_path; /* Absolute path. */
     int curr_line;
@@ -84,13 +90,13 @@ typedef struct WuiState {
 void WuiState_init (WuiState *wui_state) {
     *wui_state = (WuiState) { 0 };
     wui_state->breakpoints = WuiBreakpoint_Dyna_create();
-    wui_state->symbol_tree = SymbolTree_create();
+    wui_state->locals = SymbolTree_create();
     wui_state->curr_file_path = strbuf_create(0, NULL);
 }
 
 void WuiState_free (WuiState *wui_state) {
     WuiBreakpoint_Dyna_free(&wui_state->breakpoints);
-    SymbolTree_free(&wui_state->symbol_tree);
+    SymbolTree_free(&wui_state->locals);
     strbuf_destroy(&wui_state->curr_file_path);
 }
 

@@ -57,14 +57,21 @@ typedef struct {
     uint id_counter;
 } TreeSi;
 
-static TreeSi     pfx(create)     (void);
-static void       pfx(free)       (TreeSi *tree);
-static void       pfx(clear)      (TreeSi *tree);
-static bool       pfx(node_exists)(TreeSi *tree, uint node_id);
-static int        pfx(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item);
+typedef struct {
+    int __next_index;
+    int index;
+    TYPE *item;
+} pfx(Iterator);
+
+static TreeSi     pfx(create)      (void);
+static void       pfx(free)        (TreeSi *tree);
+static void       pfx(clear)       (TreeSi *tree);
+static int        pfx(create_node) (TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item);
+static bool       pfx(get_next)    (const TreeSi *tree, pfx(Iterator) *it);
+static bool       pfx(node_exists) (const TreeSi *tree, uint node_id);
 static int        pfx(destroy_node_and_children)(TreeSi *tree, uint node_id);
-static void       pfx(print)      (TreeSi *tree);
-static pfx(Node) *pfx(_find_node) (TreeSi *tree, uint node_id, int *out_node_index);
+static void       pfx(print)       (const TreeSi *tree);
+static pfx(Node) *pfx(_find_node)  (const TreeSi *tree, uint node_id, int *out_node_index);
 
 
 static TreeSi pfx(create)(void) {
@@ -91,7 +98,7 @@ static void pfx(clear)(TreeSi *tree) {
    @param[out] out_node_index Optional
    @returns pfx(Node) or NULL
 */
-pfx(Node) *pfx(_find_node)(TreeSi *tree, uint node_id, int *out_node_index) {
+pfx(Node) *pfx(_find_node)(const TreeSi *tree, uint node_id, int *out_node_index) {
     for (int i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
             if (out_node_index != NULL) {
@@ -104,7 +111,7 @@ pfx(Node) *pfx(_find_node)(TreeSi *tree, uint node_id, int *out_node_index) {
 }
 
 
-bool pfx(node_exists)(TreeSi *tree, uint node_id) {
+bool pfx(node_exists)(const TreeSi *tree, uint node_id) {
     for (int i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
             return true;
@@ -188,7 +195,25 @@ int pfx(destroy_node_and_children)(TreeSi *tree, uint node_id) {
 }
 
 
-void pfx(print)(TreeSi *tree) {
+/// @note To create and Iterator just zero initialize one: Iterator it = { 0 };
+/// @note Modifying the tree while iterating is UB.
+/// @param[out] it Iterator.
+/// @retval true  Can continue iterating.
+/// @retval false End reached.
+static bool pfx(get_next) (const TreeSi *tree, pfx(Iterator) *it) {
+    if (it->__next_index < 0 || it->__next_index >= tree->nodes.size) {
+        it->item = NULL;
+        return false;
+    }
+
+    it->item = &tree->nodes.items[it->__next_index].item;
+    it->index = it->__next_index;
+    ++it->__next_index;
+    return true;
+}
+
+
+void pfx(print)(const TreeSi *tree) {
     printf("------\n");
     if (tree->nodes.size == 0) {
         printf("[EMPTY TREE]\n");

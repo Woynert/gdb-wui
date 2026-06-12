@@ -4,6 +4,8 @@
 #include "raylib.h"
 #include "strview.h"
 #include "stdio.h"
+#include "strbuf_extra.h"
+
 
 typedef union Rect2 {
     struct {
@@ -33,87 +35,19 @@ void DrawTexture_flipped(Texture2D texture, int posX, int posY, Color tint)
     DrawTextureRec(texture, (Rectangle) { (float)posX, (float)posY, (float)texture.width, (float)-texture.height }, (Vector2) { 0, 0 }, tint);
 }
 
-// Defaults to '�'.
-#define CODEPOINT_NOT_FOUND 0xFFFD
-
-/*
- * Extracted from rtext.c
- * Fixes out of bounds read.
- */
-int GetCodepointNext_woy(const char *text, int *codepointSize, int available_bytes) {
-    const char *ptr = text;
-    int codepoint = CODEPOINT_NOT_FOUND;
-    *codepointSize = 1;
-    if (text == NULL || available_bytes == 0) return codepoint;
-    if (0xf0 == (0xf8 & ptr[0]) && available_bytes >= 4) {
-        if (((ptr[1] & 0xC0) ^ 0x80) || ((ptr[2] & 0xC0) ^ 0x80) ||
-            ((ptr[3] & 0xC0) ^ 0x80)) { return codepoint; }
-        codepoint = ((0x07 & ptr[0]) << 18) | ((0x3f & ptr[1]) << 12)
-            | ((0x3f & ptr[2]) << 6) | (0x3f & ptr[3]);
-        *codepointSize = 4;
-    }
-    else if (0xe0 == (0xf0 & ptr[0]) && available_bytes >= 3) {
-        if (((ptr[1] & 0xC0) ^ 0x80) || ((ptr[2] & 0xC0) ^ 0x80)) { return codepoint; }
-        codepoint = ((0x0f & ptr[0]) << 12) | ((0x3f & ptr[1]) << 6) | (0x3f & ptr[2]);
-        *codepointSize = 3;
-    }
-    else if (0xc0 == (0xe0 & ptr[0]) && available_bytes >= 2) {
-        if ((ptr[1] & 0xC0) ^ 0x80) { return codepoint; }
-        codepoint = ((0x1f & ptr[0]) << 6) | (0x3f & ptr[1]);
-        *codepointSize = 2;
-    }
-    else if (0x00 == (0x80 & ptr[0])) {
-        codepoint = ptr[0];
-        *codepointSize = 1;
-    }
-    return codepoint;
-}
-
-/*
- * Extracted from rtext.c
- * @note Fixes out of bounds read.
- */
-int GetCodepointPrev_woy(const char *buf, int *codepoint_size, int cursor)
-{
-    //const char *ptr = text;
-    int minimum_size = cursor;
-    int codepoint = CODEPOINT_NOT_FOUND;
-    *codepoint_size = 1;
-    if (buf == NULL) return codepoint;
-
-    // Move to previous codepoint
-    //do ptr--;
-    //while (((0x80 & ptr[0]) != 0) && ((0xc0 & ptr[0]) ==  0x80));
-
-    while (cursor >= 0) {
-        //if (((0x80 & buf[cursor]) != 0) && ((0xc0 & buf[cursor]) ==  0x80)) {
-        if (((0x80 & buf[cursor]) == 0) ||
-            ((0xc0 & buf[cursor]) != 0x80)) {
-            break;
-        }
-        --cursor;
-    }
-    printf("cursor %d\n", cursor);
-
-    //int cpSize = 0;
-    //codepoint = GetCodepointNext_woy(buf, &cpSize, initial_cursor);
-    //if (codepoint != 0) *codepoint_size = cpSize;
-
-    //return codepoint;
-    return GetCodepointNext_woy(&buf[cursor], codepoint_size, minimum_size-cursor+1);
-}
-
 /*
  * Extracted from rtext.c
  * Get index position for a unicode character on font, fallbacks to '�'
  */
 int GetGlyphIndex_woy(Font font, int codepoint) {
+    /* Defaults to '�' (0xFFFD). */
+
     int index = 0;
     if (!IsFontValid(font)) return index;
     int fallbackIndex = 0;
     for (int i = 0; i < font.glyphCount; i++)
     {
-        if (font.glyphs[i].value == CODEPOINT_NOT_FOUND) fallbackIndex = i;
+        if (font.glyphs[i].value == 0xFFFD) fallbackIndex = i;
 
         if (font.glyphs[i].value == codepoint)
         {
@@ -123,18 +57,6 @@ int GetGlyphIndex_woy(Font font, int codepoint) {
     }
     if ((index == 0) && (font.glyphs[0].value != codepoint)) index = fallbackIndex;
     return index;
-}
-
-/* @returns Codepoint count */
-int utf8_codepoint_count(const char *str, int size) {
-    int count = 0;
-    int codepoint_size = 0;
-    for (int i = 0; i < size;) {
-        GetCodepointNext_woy(&str[i], &codepoint_size, size-i);
-        i += codepoint_size;
-        ++count;
-    }
-    return count;
 }
 
 /* @returns byte cursor. */
@@ -176,7 +98,7 @@ void DrawTextCodepoint_woy(Font font, int codepoint, Vector2 position, float fon
  * @note: chars spacing is NOT proportional to fontSize.
  */
 void DrawTextEx_strview(
-    Font font, strview_t string, Vector2 position, float fontSize,
+    Font font, const strview_t string, Vector2 position, float fontSize,
     float spacing, float textLineSpacing, Color tint
 ) {
     float textOffsetY = 0;

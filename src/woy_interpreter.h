@@ -103,12 +103,12 @@ int WoyInterp_interpret_symbols(
    uint success = strnum_u32(line, 0, STRNUM_DEFAULT);
    if (!success) { return -1; }
 
-   if (symbol_id != 0 && !SymbolTree_node_exists(&wui_state->symbol_tree, symbol_id)) {
+   if (symbol_id != 0 && !SymbolTree_node_exists(&wui_state->locals, symbol_id)) {
       return -2;
    }
 
    if (symbol_id == 0) {
-      SymbolTree_clear(&wui_state->symbol_tree);
+      SymbolTree_clear(&wui_state->locals);
    }
 
    while (true) {
@@ -120,7 +120,7 @@ int WoyInterp_interpret_symbols(
       WuiSymbol symbol;
       WuiSymbol_init(&symbol);
 
-      symbol.basic_type = strnum_u32(strview_split_line(&src, NULL), 0, STRNUM_DEFAULT);
+      symbol.basic_type = strnum_i32(strview_split_line(&src, NULL), 0, STRNUM_DEFAULT);
 
       line = strview_split_line(&src, NULL);
       tmp = &symbol.type_name;
@@ -138,7 +138,7 @@ int WoyInterp_interpret_symbols(
       tmp = &symbol.address;
       strbuf_assign(&tmp, line);
 
-      int err = SymbolTree_create_node(&wui_state->symbol_tree, symbol_id, NULL, symbol);
+      int err = SymbolTree_create_node(&wui_state->locals, symbol_id, NULL, symbol);
       if (err != 0) {
          printfd("ERROR: Couldn't insert node.");
       }

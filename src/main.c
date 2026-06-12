@@ -64,11 +64,11 @@ int main (void) {
     ASSERT(error == 0);
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    /*error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));*/
+    /*ASSERT(error == 0);*/
+    /*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("b Server_physic_step\n"));
+    error = IPC_write_cmd(&ipc_ctx, cstr("b GameState_load_world\n"));
     ASSERT(error == 0);
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
@@ -179,7 +179,7 @@ int main (void) {
 
     // Raylib stuff
     const int screenWidth = 600;
-    const int screenHeight = 600;
+    const int screenHeight = 700;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(screenWidth, screenHeight, "WUI");

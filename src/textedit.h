@@ -109,7 +109,7 @@ void textedit_free(Textedit *textedit) {
 // FIXME: This startindex doesn't work because we are not preserving previous
 //        lines.
 void textedit__update_linebreaks(Textedit *textedit, int startindex) {
-    strview_t buffer = strview_of_buf(textedit->buffer);
+    strview_t buffer = strbuf_view2(textedit->buffer);
     if (startindex >= buffer.size) { startindex = 0; };
     int_Dyna_clear_preserve(&textedit->linebreaks);
 
@@ -315,7 +315,7 @@ void textedit__apply_change(
     // (undo ? !change->is_insert : change->is_insert) -> XOR.
     if (undo ^ change->is_insert) {
         strbuf_insert_at_index(
-            &textedit->buffer, change->start, strview_of_buf(change->buffer));
+            &textedit->buffer, change->start, strbuf_view2(change->buffer));
         textedit->cursor = change->start + change->buffer->size;
     } else {
         strbuf_pop_at_index(
@@ -351,7 +351,7 @@ void textedit__delete_chunk(Textedit *textedit, int start, int size) {
     change->is_insert = false;
     change->start = start;
     strview_t chunk =
-            strview_sub(strview_of_buf(textedit->buffer), start, start+size);
+            strview_sub(strbuf_view2(textedit->buffer), start, start+size);
     strbuf_assign(&change->buffer, chunk);
     strbuf_shrink(&change->buffer);
     textedit__apply_change(textedit, change, false);
@@ -417,7 +417,7 @@ void textedit__build_visual_lines(
 ){
     if (from_real_line >= (int)(textedit->linebreaks.size-1)) { return; }
 
-    strview_t source = strview_of_buf(textedit->buffer);
+    strview_t source = strbuf_view2(textedit->buffer);
 
     int initial_scroll = int_max(0, from_real_line -1);
     int b = textedit->linebreaks.items[initial_scroll] +1; // byte
@@ -543,7 +543,7 @@ void textedit__debug_draw(
 
         float line_spacing = 2;
         float line_height = font_size + line_spacing;
-        strview_t source = strview_of_buf(textedit->buffer);
+        strview_t source = strbuf_view2(textedit->buffer);
         for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
             // Line
             TexteditVisualLine visual_line = textedit->visualblocks.items[i];
@@ -646,7 +646,7 @@ void textedit_draw(
      * Some of these variables only need to be updated on cursor change
      */
 
-    strview_t source = strview_of_buf(textedit->buffer);
+    strview_t source = strbuf_view2(textedit->buffer);
     float fontSize = font_size;
     float textLineSpacing = line_spacing;
     TexteditVisualLine visual_line = { 0 };
@@ -823,7 +823,7 @@ void textedit_draw(
 
         DrawTextEx_strview(
             font,
-            strview_of_buf(aux_str),
+            strbuf_view2(aux_str),
             (Vector2) {
                 view_rect.x,
                 view_rect.y + (float)(i - visualline_start) * (fontSize + textLineSpacing)

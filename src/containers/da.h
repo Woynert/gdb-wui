@@ -44,6 +44,12 @@ typedef struct {
     TYPE *items;
 } Dyna;
 
+typedef struct {
+    int __next_index;
+    int index;
+    TYPE *item;
+} pfx(Iterator);
+
 static Dyna  pfx(create)                      (void);
 static void  pfx(free)                        (Dyna *da);
 static int   pfx(resize)                      (Dyna *da, int new_capacity);
@@ -58,10 +64,11 @@ static int   pfx(insert_at_preserve_order)    (Dyna *da, int index, TYPE item);
 static int   pfx(remove_at)                   (Dyna *da, int index);
 static int   pfx(pop_at_preserve_order)       (Dyna *da, int index);
 static int   pfx(set)                         (Dyna *da, int index, TYPE item);
-static TYPE *pfx(get)                         (Dyna *da, int index);
+static TYPE *pfx(get)                         (const Dyna *da, int index);
+static bool  pfx(get_next)                    (const Dyna *da, pfx(Iterator) *it);
 #ifdef DYNA__ENABLE_COMPARISONS
-static bool  pfx(has)                         (Dyna *da, TYPE value);
-static bool  pfx(find)                        (Dyna *da, TYPE value, int *out_index);
+static bool  pfx(has)                         (const Dyna *da, TYPE value);
+static bool  pfx(find)                        (const Dyna *da, TYPE value, int *out_index);
 static int   pfx(remove_first_instance)       (Dyna *da, TYPE value);
 static void  pfx(sort)                        (Dyna *r);
 static void  pfx(sort_range)                  (TYPE *buffer, int from, int to);
@@ -178,7 +185,7 @@ static int pfx(set) (Dyna *da, int index, TYPE item) {
 
 /* @note You can directly access items instead too. */
 /* @returns Pointer or NULL. */
-static TYPE *pfx(get) (Dyna *da, int index) {
+static TYPE *pfx(get) (const Dyna *da, int index) {
     if (index < 0 || index >= da->size) { return NULL; }
     return &da->items[index];
 }
@@ -227,6 +234,24 @@ static int pfx(pop_at_preserve_order) (Dyna *da, int index) {
     memmove(da->items +index, da->items +index +1, sizeof(TYPE) * (size_t)(da->size -index));
     --da->size;
     return 0;
+}
+
+
+/// @note To create and Iterator just zero initialize one: Iterator it = { 0 };
+/// @note Modifying the dynamic array while iterating is UB.
+/// @param[out] it iterator
+/// @retval true  Can continue iterating.
+/// @retval false End reached
+static bool pfx(get_next) (const Dyna *da, pfx(Iterator) *it) {
+    if (it->__next_index < 0 || it->__next_index >= da->size) {
+        it->item = NULL;
+        return false;
+    }
+
+    it->item = &da->items[it->__next_index];
+    it->index = it->__next_index;
+    ++it->__next_index;
+    return true;
 }
 
 
@@ -279,7 +304,7 @@ static void pfx(sort) (Dyna *r) {
     pfx(sort_range) (r->items, 0, r->size-1);
 }
 
-static bool pfx(has) (Dyna *da, TYPE value) {
+static bool pfx(has) (const Dyna *da, TYPE value) {
     for (int i = 0; i < da->size; ++i) {
         TYPE *stored_value = &da->items[i];
         if (*stored_value == value) {
@@ -291,7 +316,7 @@ static bool pfx(has) (Dyna *da, TYPE value) {
 
 /// @param[out] out_index Item index if found
 /// @returns true if found
-static bool pfx(find) (Dyna *da, TYPE value, int *out_index) {
+static bool pfx(find) (const Dyna *da, TYPE value, int *out_index) {
     for (int i = 0; i < da->size; ++i) {
         TYPE *stored_value = &da->items[i];
         if (*stored_value == value) {
