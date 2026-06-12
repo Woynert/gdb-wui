@@ -138,7 +138,10 @@ int WoyInterp_interpret_symbols(
       tmp = &symbol.address;
       strbuf_assign(&tmp, line);
 
-      SymbolTree_create_node(&wui_state->symbol_tree, symbol_id, NULL, symbol);
+      int err = SymbolTree_create_node(&wui_state->symbol_tree, symbol_id, NULL, symbol);
+      if (err != 0) {
+         printfd("ERROR: Couldn't insert node.");
+      }
 
       //printf("Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
             //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
