@@ -160,4 +160,32 @@ int WoyInterp_interpret_symbols(
    return 0;
 }
 
+int WoyInterp_interpret_file_line(WoyInterp *woy_interp, WuiState *wui_state) {
+   strbuf_t *tmp = &woy_interp->buffer;
+   strview_t src = strbuf_view(&tmp);
+   strview_t line;
+   wui_state->has_valid_location = false;
+
+   line = strview_split_line(&src, NULL);
+   uint success = strnum_u32(line, 0, STRNUM_DEFAULT);
+   if (success == 0) { return -1; }
+
+   line = strview_split_line(&src, NULL);
+   if (!strview_is_valid(line)) { return -1; }
+   strbuf_assign(&wui_state->curr_file_path, line);
+
+   line = strview_split_line(&src, NULL);
+   if (!strview_is_valid(line)) { return -1; }
+   int line_number = strnum_i32(line, 0, STRNUM_DEFAULT);
+   wui_state->curr_line = line_number;
+
+   // DELME
+   printf("FILE_LINE GOT: %"PRIstr" : %d\n",
+      PRIstrarg(strbuf_view(&wui_state->curr_file_path)), wui_state->curr_line);
+   // DELME
+
+   wui_state->has_valid_location = true;
+   return 0;
+}
+
 #endif // !WOY_INTERPRETER_H

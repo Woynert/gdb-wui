@@ -131,6 +131,23 @@ def woy_get_breakpoints():
         print("---")
 
 
+def woy_get_file_and_line():
+    frame = gdb.selected_frame()
+    if not frame.is_valid():
+        print("0")
+        return
+    sal = frame.find_sal()
+    if not sal.is_valid():
+        print("0")
+        return
+    if not sal.symtab.is_valid():
+        print("0")
+        return
+    print("1")
+    print(sal.symtab.fullname())
+    print(sal.line)
+
+
 ## THIS MUST BE DEFINED SOMEWHERE ELSE
 
 def woy_hook_EntityInfo_ConMap(value: gdb.Value, name: str):

@@ -76,16 +76,22 @@ void WuiSymbol_init (WuiSymbol *wui_symbol) {
 typedef struct WuiState {
     WuiBreakpoint_Dyna breakpoints;
     SymbolTree symbol_tree;
+    bool has_valid_location; /* Guards current file path and line. */
+    strbuf_t *curr_file_path; /* Absolute path. */
+    int curr_line;
 } WuiState;
 
 void WuiState_init (WuiState *wui_state) {
+    *wui_state = (WuiState) { 0 };
     wui_state->breakpoints = WuiBreakpoint_Dyna_create();
     wui_state->symbol_tree = SymbolTree_create();
+    wui_state->curr_file_path = strbuf_create(0, NULL);
 }
 
 void WuiState_free (WuiState *wui_state) {
     WuiBreakpoint_Dyna_free(&wui_state->breakpoints);
     SymbolTree_free(&wui_state->symbol_tree);
+    strbuf_destroy(&wui_state->curr_file_path);
 }
 
 #endif // !WUI_STATE

@@ -94,6 +94,14 @@ int main (void) {
     ASSERT(error == 0);
     IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
+    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_file_and_line()\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_FILE_LINE, &wui_state, 0);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+
     // find a symbol of type struct
     /*for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {*/
         /*WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;*/

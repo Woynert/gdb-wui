@@ -194,6 +194,7 @@ enum IPC_WAIT_DO {
     IPC_WAIT_DO_READ_WOY_BREAKPOINTS,
     IPC_WAIT_DO_READ_WOY_LOCALS,
     IPC_WAIT_DO_READ_WOY_QUERY,
+    IPC_WAIT_DO_READ_WOY_FILE_LINE,
 };
 
 
@@ -251,6 +252,8 @@ void IPC_wait_for_prompt(
             else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
                 int err = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
                 ASSERT(err == 0);
+            } else if (ipc_do == IPC_WAIT_DO_READ_WOY_FILE_LINE) {
+                WoyInterp_interpret_file_line(&woy_interp, wui_state);
             }
             WoyInterp_reset(&woy_interp);
 
