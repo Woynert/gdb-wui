@@ -132,6 +132,17 @@ int utf8_codepoint_count_strview(const strview_t view) {
     return utf8_codepoint_count(view.data, view.size);
 }
 
+static void strbuf_empty(strbuf_t** buf_ptr)
+{
+    strbuf_t* buf = NULL;
+    if (buf_ptr && *buf_ptr) {
+        buf = *buf_ptr;
+        buf->size = 0;
+        buf->cstr[0] = 0;
+    }
+}
+
+
 
 /*
 void strbuf_pop_at_index_TEST(void) {

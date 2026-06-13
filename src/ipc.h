@@ -14,110 +14,79 @@
 #include "strview.h"
 #include "strbuf_extra.h"
 #include "cli_prompt.h"
-
 #include "woy_interpreter.h"
 
 #define GDB_BUFFER_SIZE 4096
 
 
 typedef struct IPCReader {
-    union {
-        strbuf_space_t(GDB_BUFFER_SIZE) _buffer;
-        strbuf_t buffer;
-    };
+    strbuf_t *buffer;
 } IPCReader;
 
 
 void IPCReader_init(IPCReader *reader) {
     *reader = (IPCReader) { 0 };
-    STRBUF_STATIC_INIT2(GDB_BUFFER_SIZE, reader->_buffer);
+    reader->buffer = strbuf_create(0, NULL);
 }
 
 
-/// @retval  0 Found new line.
-/// @retval -1 Not found.
-int _IPCReader_get_new_line(IPCReader *reader, strbuf_t *out_line) {
-    strbuf_t *src = &reader->buffer;
-
-    strview_t split_right = strbuf_view(&src);
-    strview_t split_left = strview_split_first_delim(&split_right, "\n", false);
-    if (split_left.size == 0 && split_right.size == 0) {
-        return -1;
-    }
-    strbuf_assign(&out_line, split_left);
-    strbuf_assign(&src, split_right);
-    return 0;
+void IPCReader_free(IPCReader *reader) {
+    strbuf_destroy(&reader->buffer);
+    *reader = (IPCReader) { 0 };
 }
 
-/// @retval  1 Found gdb prompt.
-/// @retval  0 Found new line.
-/// @retval -1 Not found.
-int _IPCReader_find_gdb_prompt(IPCReader *reader, strbuf_t *out_line) {
-    strbuf_t *src = &reader->buffer;
 
-    strview_t split_right = strbuf_view(&src);
-    strview_t split_left = strview_find_first_strview(split_right, cstr("\n(gdb) "));
-    if (!strview_is_valid(split_left)) {
-        return -1;
-    }
-
-    strbuf_assign(&src, split_right);
-    return 0;
-}
-
-/// Goal: Look for "(gdb) " And there has to be no more buffer to read.
-bool _IPCReader_is_line_gdb_prompt(strview_t line) {
+/// Try Look for "(gdb) " and there has to be no more buffer to read.
+bool IPCReader_is_line_gdb_prompt(strview_t line) {
     strview_t line_end = strview_split_index(&line, -6);
     return (strview_compare(line_end, cstr("(gdb) ")) == 0);
 }
 
 
-/// @retval  1 OK, Found GDB prompt, stop reading.
-/// @retval  0 OK, Found newline, keep reading.
-/// @retval -1 No more lines.
-int _IPCReader_read_line(IPCReader *reader, int fd, strbuf_t *out_line) {
-    strbuf_assign(&out_line, cstr(""));
+int IPCReader_get_curr_line(const IPCReader *reader, strview_t *line_out) {
+    if (reader->buffer->size <= 0) { return -1; }
 
-    // got newline?
-    if (_IPCReader_get_new_line(reader, out_line) == 0) {
-        // reached EOF
-        if (reader->buffer.size == 0) {
-            if (_IPCReader_is_line_gdb_prompt(strbuf_view(&out_line))) {
-                return 1;
-            }
-        }
+    strview_t right = strbuf_view2(reader->buffer);
+    strview_t left = strview_split_first_delim(&right, "\n", false);
+    if (strview_is_valid(left)) {
+        *line_out = left;
         return 0;
     }
 
-    // No new line, read until buffer full or can't read anymore.
-    ssize_t total_bytes_read = 0;
-    ssize_t bytes_read = 0;
-    do {
-        bytes_read = read(fd,
-                reader->buffer.cstr + bytes_read,
-                size_t_max(0, (size_t)reader->buffer.capacity -1 -(size_t)bytes_read));
-        if (bytes_read > 0) { total_bytes_read += bytes_read; }
-    } while (bytes_read > 0);
-
-    reader->buffer.cstr[total_bytes_read] = '\0';
-    {
-        strbuf_t *tmp = &reader->buffer;
-        strbuf_recalculate_size_as_cstr(&tmp);
-    }
-
-    // got newline?
-    if (_IPCReader_get_new_line(reader, out_line) == 0) {
-        // reached EOF
-        if (reader->buffer.size == 0) {
-            if (_IPCReader_is_line_gdb_prompt(strbuf_view(&out_line))) {
-                return 1;
-            }
-        }
-        return 0;
-    }
-    return -1;
+    *line_out = strbuf_view2(reader->buffer);
+    return 0;
 }
 
+
+void IPCReader_read_lines(IPCReader *reader, int fd) {
+    if (reader->buffer->size > 0) { return; }
+
+    /* @note: Potential to grow indefinitely. Consider upper limit. */
+    char buf[256];
+    for(;;) {
+        int bytes_read = (int)read(fd, buf, sizeof(buf) / sizeof(buf[0]));
+        if (bytes_read <= 0) { break; }
+        strview_t view = { .data = buf, .size = bytes_read };
+        strbuf_append(&reader->buffer, view);
+    }
+}
+
+
+/* Advaces buffer until after \n. */
+void IPCReader_consume_line(IPCReader *reader) {
+    if (reader->buffer->size <= 0) { return; }
+
+    strview_t right = strbuf_view(&reader->buffer);
+    strview_t left = strview_split_first_delim(&right, "\n", false);
+
+    /* Couldn't split, that means this is the last line. */
+    if (!strview_is_valid(left)) {
+        strbuf_empty(&reader->buffer);
+        return;
+    }
+
+    strbuf_assign(&reader->buffer, right);
+}
 
 typedef struct IPCCtx {
     int child_pid;
@@ -178,10 +147,6 @@ int IPC_launch_gdb(IPCCtx *ctx) {
 }
 
 
-void IPC_process(IPCCtx *ctx) {
-}
-
-
 void IPC_cleanup(IPCCtx *ctx) {
     close(ctx->master_to_child_pipe[1]);
     close(ctx->child_to_master_pipe[0]);
@@ -198,11 +163,12 @@ enum IPC_WAIT_DO {
 };
 
 
-/// @param symbol_id. Optional. Only if ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS
+/// @param symbol_id [optional] Only if ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS
 ///                             or ipc_do == IPC_WAIT_DO_READ_WOY_QUERY
-/// BLOCKS until gdb prompt is found
+/// @note BLOCKS until gdb prompt is found or Timeout.
 /// @note Prints all output
-void IPC_wait_for_prompt(
+/// @returns Error.
+int IPC_wait_for_prompt(
     IPCCtx *ipc_ctx,
     IPCReader* reader,
     CliPrompt *cli_prompt,
@@ -212,54 +178,69 @@ void IPC_wait_for_prompt(
 ) {
     /// TODO: Sort arguments
 
-    strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
-    strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
-
+    int return_err = 0;
 
     /*TODO: if ipc_do != NOTHING or HIDE*/
     WoyInterp woy_interp = { 0 };
     WoyInterp_init(&woy_interp);
     WoyInterp_reset(&woy_interp);
 
+    const long TIMEOUT_MS = 5000;
+    long start = get_system_ms();
 
-    int error;
-    while(true) {
-        sleep_ms(5);
-        error = _IPCReader_read_line(
-                reader, ipc_ctx->child_to_master_pipe[0], aux_str);
-        if (error == 0) {
-            if (ipc_do != IPC_WAIT_DO_HIDE) {
-                CliPrompt_print_line(cli_prompt, "|- %s\n", aux_str->cstr);
-            }
-            if (ipc_do != IPC_WAIT_DO_NOTHING) {
-                WoyInterp_push_line(&woy_interp, strbuf_view(&aux_str));
+    for(;;) {
+
+        strview_t line = STRVIEW_INVALID;
+        IPCReader_read_lines(reader, ipc_ctx->child_to_master_pipe[0]);
+        int err = IPCReader_get_curr_line(reader, &line);
+
+        /* No more lines. */
+        if (err == -1 || !strview_is_valid(line)) {
+            if (get_system_ms() > start + TIMEOUT_MS) {
+                printfd("Timeout: reading from gdb output.");
+                return_err = -1;
+                break;
             }
         }
 
-        // finish reading
-        else if (error == 1) {
+        /* Found gdb prompt. */
+        if (IPCReader_is_line_gdb_prompt(line)) {
             if (ipc_do == IPC_WAIT_DO_HIDE) {
                 CliPrompt_print_line(cli_prompt, "|- %s\n", "(gdb)");
-            }
-            else {
-                CliPrompt_print_line(cli_prompt, "|- %s\n", aux_str->cstr);
+            } else {
+                CliPrompt_print_line(cli_prompt, "|- %"PRIstr"\n", PRIstrarg(line));
             }
             CliPrompt_print_line(cli_prompt, "|- %s\n", "<<<INSERTING>>>");
 
             if (ipc_do == IPC_WAIT_DO_READ_WOY_BREAKPOINTS) {
                 WoyInterp_interpret_breakpoints(&woy_interp, wui_state);
-            }
-            else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
-                int err = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
-                ASSERT(err == 0);
+            } else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
+                int err2 = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
+                ASSERT(err2 == 0);
             } else if (ipc_do == IPC_WAIT_DO_READ_WOY_FILE_LINE) {
                 WoyInterp_interpret_file_line(&woy_interp, wui_state);
             }
-            WoyInterp_reset(&woy_interp);
 
-            return;
+            WoyInterp_reset(&woy_interp);
+            IPCReader_consume_line(reader);
+            break;
         }
+
+        /* Found newline. */
+        else {
+            if (ipc_do != IPC_WAIT_DO_HIDE) {
+                CliPrompt_print_line(cli_prompt, "|- %"PRIstr"\n", PRIstrarg(line));
+            }
+            if (ipc_do != IPC_WAIT_DO_NOTHING) {
+                WoyInterp_push_line(&woy_interp, line);
+            }
+        }
+
+        IPCReader_consume_line(reader);
+        sleep_ms(5);
     }
+
+    return return_err;
 }
 
 

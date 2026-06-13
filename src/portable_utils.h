@@ -52,6 +52,41 @@ void sleep_ms(int milliseconds){
 #endif
 }
 
+#ifdef _WIN32
+#include <windows.h>
+#else // Linux, macOS, etc.
+#include <sys/time.h>
+#endif
+
+long get_system_ms(void) {
+#ifdef _WIN32
+    return GetTickCount64();
+#else // Linux, macOS, etc.
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+#endif
+}
+
+/* You get 24 days worth of milliseconds (INT_MAX). */
+//int get_ms_since_start(void) {
+    //static bool start_is_set = false;
+    //static long start;
+    //if (!start_is_set) {
+        //start_is_set = true;
+        //start = get_system_ms();
+    //}
+    //return (int)(get_system_ms() - start);
+//}
+
+#define ANSI_RESET "\033[0m"
+#define ANSI_RED "\033[31m"
+#define ANSI_GRE "\033[32m"
+#define ANSI_YEL "\033[33m"
+#define ANSI_BLU "\033[34m"
+#define ANSI_MAG "\033[35m"
+#define ANSI_CYA "\033[36m"
+
 #define ASSERT(value) \
     do { \
         if ((value) != true) { \
@@ -66,8 +101,8 @@ void sleep_ms(int milliseconds){
 
 #define printfd(fmt, ...) \
     do { \
-        printf(fmt, ##__VA_ARGS__); \
-        printf(" %s:%s:%d\n", __func__, __FILE__, __LINE__); \
+        printf(ANSI_YEL fmt, ##__VA_ARGS__); \
+        printf(ANSI_RESET" %s:%s:%d\n", __func__, __FILE__, __LINE__); \
     } while (0)
 
 #define PRIbool(arg) (arg ? "true" : "false")
