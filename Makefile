@@ -10,10 +10,10 @@ mesonSetupDebug:
 	meson setup --reconfigure --prefix=$(CURDIR)/build build \
 		--debug -Db_ndebug=false --buildtype=debug  -Doptimization=1
 
-compile:
+compile: generate
 	meson compile -C build
 
-generate:
+generate: src/gdb_woy_api.py
 	src/bin2header_struct.py -i src/gdb_woy_api.py -o src/gdb_woy_api.h -v PYTHON_CODE
 
 run:

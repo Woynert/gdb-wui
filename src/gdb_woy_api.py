@@ -27,7 +27,9 @@ def _woy_print_gdb_value(value: gdb.Value, name: str):
     print(value_str)
 
     # address
-    if (value.address != None):
+    if (value.is_optimized_out):
+        print(None)
+    elif (value.address != None):
         print(hex(int(value.address)))
     elif (basic_type.code == gdb.TYPE_CODE_PTR):
         print(hex(int(value)))
@@ -55,7 +57,7 @@ def woy_locals() -> None:
     print("1")
     symbol: gdb.Symbol
     for symbol in unique_symbols:
-        value: gdb.Value = symbol.value(curr_frame) # should never throw
+        value: gdb.Value = symbol.value(curr_frame) # Should never throw. (?)
         _woy_print_gdb_value(value, symbol.name)
 
 

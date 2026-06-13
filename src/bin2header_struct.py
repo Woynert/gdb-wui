@@ -7,7 +7,7 @@ import argparse
 import sys
 import os
 
-BYTES_PER_BUFFER = 4095 # C99 string literal limit
+BYTES_PER_BUFFER = 4095 # C99 string literal limit.
 BYTES_PER_LINE = 21
 
 def stringify_nibble(nibble):
@@ -38,7 +38,7 @@ def bin2header(infile, outfile, var_name):
     outfile.write('#ifdef EMBEDDED_BIN_IMPLEMENTATION__{}\n'.format(var_name))
     outfile.write('const struct {\n')
 
-    # struct definition
+    # Struct definition.
 
     i = 0
     while file_size_bytes > 0:
@@ -49,24 +49,32 @@ def bin2header(infile, outfile, var_name):
 
     outfile.write('}} {}_struct = {{\n'.format(var_name))
 
-    # hex dump
+    # Hex dump.
 
     i = 0; j = 0
     while True:
         byte = infile.read(1)
+
         if byte == b"":
-            if (i != 0):
+            # Place final " and break.
+            if (i != 0 and j != 0):
                 outfile.write('"\n')
             break
 
         if (j == 0):
+            # Start of new line.
             outfile.write('"')
+
         write_byte(outfile, ord(byte))
         i += 1; j += 1
+
         if (i >= BYTES_PER_BUFFER):
+            # Start of new buffer.
             i = 0; j = 0
             outfile.write('",\n')
+
         elif (j >= BYTES_PER_LINE):
+            # End of line.
             j = 0
             outfile.write('"\n')
 
