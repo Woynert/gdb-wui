@@ -1,27 +1,67 @@
 #ifndef IPC_H
 #define IPC_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sys/prctl.h>
-#include <signal.h>
 
+#include "wui_state.h"
 #include "strbuf.h"
 #include "strview.h"
-#include "strbuf_extra.h"
 #include "cli_prompt.h"
-#include "woy_interpreter.h"
 
 #define GDB_BUFFER_SIZE 4096
 
+enum IPC_WAIT_DO {
+    IPC_WAIT_DO_NOTHING,
+    IPC_WAIT_DO_HIDE,
+    IPC_WAIT_DO_READ_WOY_BREAKPOINTS,
+    IPC_WAIT_DO_READ_WOY_LOCALS,
+    IPC_WAIT_DO_READ_WOY_QUERY,
+    IPC_WAIT_DO_READ_WOY_FILE_LINE,
+};
 
 typedef struct IPCReader {
     strbuf_t *buffer;
 } IPCReader;
+
+typedef struct IPCCtx {
+    int child_pid;
+    int master_to_child_pipe[2];
+    int child_to_master_pipe[2];
+} IPCCtx;
+
+void IPCReader_init(IPCReader *reader);
+void IPCReader_free(IPCReader *reader);
+bool IPCReader_is_line_gdb_prompt(strview_t line);
+int IPCReader_get_curr_line(const IPCReader *reader, strview_t *line_out);
+void IPCReader_read_lines(IPCReader *reader, int fd);
+void IPCReader_consume_line(IPCReader *reader);
+int IPC_launch_gdb(IPCCtx *ctx);
+void IPC_cleanup(IPCCtx *ctx);
+int IPC_wait_for_prompt(
+    IPCCtx *ipc_ctx,
+    IPCReader* reader,
+    CliPrompt *cli_prompt,
+    enum IPC_WAIT_DO ipc_do,
+    WuiState *wui_state,
+    uint symbol_id
+);
+int IPC_write_cmd(IPCCtx *ctx, strview_t cmd);
+
+#endif // !IPC_H
+
+#include "have_lsp.h"
+#if (defined IPC_H_IMPLEMENTATION || defined HAVE_LSP) && !defined IPC_H_DONE
+#define IPC_H_DONE
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+
+#include "strbuf_extra.h"
+#include "woy_interpreter.h"
 
 
 void IPCReader_init(IPCReader *reader) {
@@ -88,12 +128,6 @@ void IPCReader_consume_line(IPCReader *reader) {
     strbuf_assign(&reader->buffer, right);
 }
 
-typedef struct IPCCtx {
-    int child_pid;
-    int master_to_child_pipe[2];
-    int child_to_master_pipe[2];
-} IPCCtx;
-
 
 /// @retuns error
 int IPC_launch_gdb(IPCCtx *ctx) {
@@ -152,15 +186,6 @@ void IPC_cleanup(IPCCtx *ctx) {
     close(ctx->child_to_master_pipe[0]);
     wait(NULL);
 }
-
-enum IPC_WAIT_DO {
-    IPC_WAIT_DO_NOTHING,
-    IPC_WAIT_DO_HIDE,
-    IPC_WAIT_DO_READ_WOY_BREAKPOINTS,
-    IPC_WAIT_DO_READ_WOY_LOCALS,
-    IPC_WAIT_DO_READ_WOY_QUERY,
-    IPC_WAIT_DO_READ_WOY_FILE_LINE,
-};
 
 
 /// @param symbol_id [optional] Only if ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS
@@ -252,4 +277,4 @@ int IPC_write_cmd(IPCCtx *ctx, strview_t cmd) {
     return written_bytes == cmd.size ? 0 : -1;
 }
 
-#endif // !IPC_H
+#endif // !IPC_H_IMPLEMENTATION

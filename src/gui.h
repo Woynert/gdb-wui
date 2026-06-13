@@ -14,8 +14,10 @@
 #include "strbuf_extra.h"
 #include "portable_utils.h"
 
+//#include "ipc.h"
 #include "wui_state.h"
 #include "textedit.h"
+#include "main_context.h"
 
 
 /* Notes:
@@ -189,7 +191,10 @@ void GUI_close_popup(int option_selected) {
 //} GuiBreakpointView;
 
 
-void GuiBreakpointView_draw(WuiState *state, Rect2 view_rect) {
+void GUI_draw_breakpoints(Ctx *ctx, WuiState *state, Widget widget) {
+
+    bool is_focused = widget.id == ctx->widget_focused_id;
+    Rect2 view_rect = widget.area;
 
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
@@ -214,7 +219,8 @@ void GuiBreakpointView_draw(WuiState *state, Rect2 view_rect) {
 
     // Open context menu.
 
-    if (CheckCollisionPointRec(GetMousePosition(), view_rect.rect)
+    if (is_focused
+        && CheckCollisionPointRec(GetMousePosition(), view_rect.rect)
         && BetterMouse_is_pressed(MOUSE_BUTTON_RIGHT)
     ) {
         printf("Clicked!\n");
@@ -233,7 +239,10 @@ bool GUI__symbol_is_expandable(int symbol_type) {
     /* Symbol is ARRAY o pointer to STRUCT. */
 }
 
-void GUI_draw_symbol_tree(SymbolTree *tree, Rect2 view_rect) {
+void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
+    bool is_focused = widget.id == ctx->widget_focused_id;
+    Rect2 view_rect = widget.area;
+
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
 
@@ -277,8 +286,21 @@ void GUI_draw_symbol_tree(SymbolTree *tree, Rect2 view_rect) {
         selectable_area.height = LINE_HEIGHT * (it_all_fits ? 1 : 2);
         Color selectable_area_color;
 
-        if (CheckCollisionPointRec(GetMousePosition(), selectable_area.rect)) {
+        if (is_focused && CheckCollisionPointRec(GetMousePosition(), selectable_area.rect))
+        {
             selectable_area_color = BLUE;
+            if (BetterMouse_is_pressed(MOUSE_LEFT_BUTTON)) {
+                // DELME
+                //int err = IPC_write_cmd(&ipc_ctx, cstr("py woy_locals()\n"));
+                //if (err == 0) {
+                    //IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, 0);
+                    //err = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+                    //if (err == 0) {
+                        //IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+                    //}
+                //}
+                // DELME
+            }
         } else {
             selectable_area_color = (it.index % 2) == 0 ? GOLD : ORANGE;
         }
@@ -307,20 +329,21 @@ void GUI_draw_symbol_tree(SymbolTree *tree, Rect2 view_rect) {
 }
 
 
-void GUI_draw_locals(WuiState *state, Rect2 view_rect) {
-    GUI_draw_symbol_tree(&state->locals, view_rect);
+void GUI_draw_locals(Ctx *ctx, WuiState *state, Widget widget) {
+    GUI_draw_symbol_tree(ctx, &state->locals, widget);
 }
 
-void GUI_draw_popups(void) {
+void GUI_draw_popups(Ctx *ctx, Widget widget) {
     if (GUI.curr_popup == POPUP_NONE) { return; }
     else if (GUI.curr_popup == POPUP_CONTEXT_MENU) {
+        if (widget.id != ctx->widget_focused_id) { return; }
         Vector2 mouse = GetMousePosition();
         strview_t all_lines = strbuf_view2(&GUI.context_menu.options);
         strview_t line = { 0 };
         int line_height = (int)GUI.font_size + GUI_POPUP_PAD;
         Rect2 rect = {{
-            GUI.context_menu.origin.x,
-            GUI.context_menu.origin.y,
+            widget.area.x, // GUI.context_menu.origin.x,
+            widget.area.y, // GUI.context_menu.origin.y,
             (float)GUI.context_menu.width,
             (float)GUI.context_menu.option_amount * (float)line_height
         }};
@@ -363,30 +386,86 @@ void GUI_draw_popups(void) {
 }
 
 
-void GUI_draw_all(WuiState *state) {
+/// @returns widget id.
+Widget GUI_register_widget(Ctx *ctx, Rect2 rect) {
+    Widget w = { .area = rect, .id = ctx->widget_stack.size };
+    Widget_Dyna_append(&ctx->widget_stack, w);
+    return w;
+}
+
+
+void GUI__calculate_focus(Ctx *ctx) {
+    /* Check stack from top to bottom. */
+
+    for (int i = ctx->widget_stack.size-1; i > -1; --i) {
+        Widget widget = ctx->widget_stack.items[i];
+
+        if (CheckCollisionPointRec(GetMousePosition(), widget.area.rect)) {
+            ctx->widget_focused_id = widget.id;
+            return;
+        }
+    }
+    ctx->widget_focused_id = -1;
+}
+
+
+void GUI_draw_all(Ctx *ctx, WuiState *state) {
     BeginTextureMode(GUI.final_texture);
         ClearBackground(BLANK);
     EndTextureMode();
 
-    Rect2 view_rect;
+    // Widget stack focus calculation.
+    Widget_Dyna_clear_preserve(&ctx->widget_stack);
+    Widget widget_locals = GUI_register_widget(ctx, (Rect2) {{ 20, 500, 500, 300 }});
+    Widget widget_breakpoint = GUI_register_widget(ctx, (Rect2) {{ 20, 450, 200, 120 }});
+    Widget widget_textedit = GUI_register_widget(ctx, (Rect2) {{ 250, 100, 187, 150 }});
 
-    // Breakpoint
+    // @Note: This "popup" system eventually has to be refactored away.
+    // Include popup if opened.
+    Widget widget_popup = WIDGET_INVALID;
+    bool popup_is_open = GUI.curr_popup != POPUP_NONE;
+    if (popup_is_open) {
+        widget_popup = GUI_register_widget(
+            ctx,
+            (Rect2) {{
+                GUI.context_menu.origin.x, GUI.context_menu.origin.y,
+                (float)GetScreenWidth(), (float)GetScreenHeight()
+            }}
+        );
+    }
 
-    view_rect = (Rect2) {{ 20, 10, 200, 120 }};
-    GuiBreakpointView_draw(state, view_rect);
-    BeginTextureMode(GUI.final_texture);
-        DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
-    EndTextureMode();
+
+    GUI__calculate_focus(ctx);
+    printf("Currently the focused widget is %d\n", ctx->widget_focused_id);
+
+    if (popup_is_open && ctx->widget_focused_id != widget_popup.id) {
+        GUI_close_popup(-1);
+    }
 
     // Locals
 
-    view_rect = (Rect2) {{ 20, 500, 500, 300 }};
-    GUI_draw_locals(state, view_rect);
+    GUI_draw_locals(ctx, state, widget_locals);
     BeginTextureMode(GUI.final_texture);
-        DrawTextureRec_flipped(GUI.aux_texture.texture, view_rect.rect, view_rect.pos, WHITE);
+    DrawTextureRec_flipped(GUI.aux_texture.texture,
+            widget_locals.area.rect, widget_locals.area.pos, WHITE);
+    EndTextureMode();
+
+    // Breakpoint
+
+    GUI_draw_breakpoints(ctx, state, widget_breakpoint);
+    BeginTextureMode(GUI.final_texture);
+    DrawTextureRec_flipped(GUI.aux_texture.texture,
+            widget_breakpoint.area.rect, widget_breakpoint.area.pos, WHITE);
     EndTextureMode();
 
     // TextEdit
+
+    //textedit_draw(&GUI.textedit, widget_textedit.area, GUI.font, GUI.font_size,
+                //GUI.font_spacing, GUI.font_width);
+    //BeginTextureMode(GUI.final_texture);
+    //DrawTextureRec_flipped(GUI.aux_texture.texture,
+            //widget_textedit.area.rect, widget_textedit.area.pos, WHITE);
+    //EndTextureMode();
 
     /*
     view_rect = (Rect2) {{ 150, 150, 187, 150 }};
@@ -401,12 +480,17 @@ void GUI_draw_all(WuiState *state) {
         DrawTexture_flipped(GUI.final_texture.texture, 0, 0, WHITE);
         DrawFPS(0,0);
 
-        GUI_draw_popups();
 
-        view_rect = (Rect2) {{ 250, 300, 187, 150 }};
-        textedit_draw(&GUI.textedit, view_rect, GUI.font, GUI.font_size,
+        //view_rect = (Rect2) {{ 250, 300, 187, 150 }};
+        //textedit_draw(&GUI.textedit, view_rect, GUI.font, GUI.font_size,
+                //GUI.font_spacing, GUI.font_width);
+
+        textedit_draw(&GUI.textedit, widget_textedit.area, GUI.font, GUI.font_size,
                 GUI.font_spacing, GUI.font_width);
 
+        if (popup_is_open) {
+            GUI_draw_popups(ctx, widget_popup);
+        }
     /* EndDrawing(); Do not call EndDrawing here. See main loop. */
 }
 

@@ -865,8 +865,10 @@ void textedit_draw(
 
     // Debug drawing.
 
-    textedit__debug_draw(textedit, (Vector2){350, 10}, view_max_lines,
-            font, font_size, font_spacing);
+    textedit__debug_draw(
+        textedit,
+        (Vector2){view_rect.x +view_rect.width, view_rect.y},
+        view_max_lines, font, font_size, font_spacing);
 
     // controls
 

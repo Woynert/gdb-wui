@@ -25,9 +25,15 @@ typedef struct CliPrompt {
     uint _cursor;
 } CliPrompt;
 
+void CliPrompt_init(CliPrompt *cli_prompt) {
+    *cli_prompt = (CliPrompt) { 0 };
+    STRBUF_STATIC_INIT2(CLI_PROMPT_SIZE, cli_prompt->_input);
+}
+
 void _CliPrompt_restore_terminal(void) {
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_tio);
 }
+
 
 void CliPrompt_setup(CliPrompt *cli_prompt) {
     // Enables "raw mode"
@@ -42,9 +48,6 @@ void CliPrompt_setup(CliPrompt *cli_prompt) {
     // Make STDIN non-blocking
     fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 
-    // Initialize structure
-    *cli_prompt = (CliPrompt) { 0 };
-    STRBUF_STATIC_INIT2(CLI_PROMPT_SIZE, cli_prompt->_input);
 }
 
 static void _CliPrompt_clear_line(void) {

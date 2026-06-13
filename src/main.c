@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -17,6 +16,12 @@
 #include "gdb_woy_api.h"
 #include "wui_state.h"
 #include "ipc.h"
+#include "main_context.h"
+
+/* IMPLEMENTATIONS */
+#define IPC_H_IMPLEMENTATION
+#include "ipc.h"
+
 
 /*void away(int *p) {*/
     /**p = 9;*/
@@ -32,149 +37,72 @@ int main (void) {
         .size = (int)PYTHON_CODE_len
     };
 
-    WuiState wui_state = { 0 };
-    WuiState_init(&wui_state);
+    Ctx ctx = { 0 };
+    ctx_init(&ctx);
 
-    IPCCtx ipc_ctx = { 0 };
-    IPC_launch_gdb(&ipc_ctx);
-
-    IPCReader reader = { 0 };
-    IPCReader_init(&reader);
-
-    CliPrompt cli_prompt = { 0 };
-    CliPrompt_setup(&cli_prompt);
+    WuiState *wui_state = &ctx.wui_state;
+    IPCCtx *ipc_ctx = &ctx.ipc_ctx;
+    IPCReader *reader = &ctx.reader;
+    CliPrompt *cli_prompt = &ctx.cli_prompt;
 
     strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
-
     int error;
-    error = IPC_launch_gdb(&ipc_ctx);
+
+    CliPrompt_setup(cli_prompt);
+    error = IPC_launch_gdb(ipc_ctx);
     ASSERT(error == 0);
 
     // Insert custom script.
 
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
-    error = IPC_write_cmd(&ipc_ctx, cstr("python\n"));
-    error = IPC_write_cmd(&ipc_ctx, python_code_view);
-    error = IPC_write_cmd(&ipc_ctx, cstr("end\n"));
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    error = IPC_write_cmd(ipc_ctx, cstr("python\n"));
+    error = IPC_write_cmd(ipc_ctx, python_code_view);
+    error = IPC_write_cmd(ipc_ctx, cstr("end\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_HIDE, NULL, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_HIDE, NULL, 0);
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    ASSERT(0 == IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0));
 
-    /*error = IPC_write_cmd(&ipc_ctx, cstr("b main\n"));*/
+    /*error = IPC_write_cmd(ipc_ctx, cstr("b main\n"));*/
     /*ASSERT(error == 0);*/
-    /*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
+    /*IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("b GameState_load_world\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("b GameState_load_world\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("run\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("run\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_breakpoints()\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("py woy_get_breakpoints()\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS, &wui_state, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_READ_WOY_BREAKPOINTS, wui_state, 0);
     // After calling a 'WOY API' command, clear the GDB previous command
-    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_locals()\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("py woy_locals()\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, wui_state, 0);
     // After calling a 'WOY API' command, clear the GDB previous command
-    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
-    error = IPC_write_cmd(&ipc_ctx, cstr("py woy_get_file_and_line()\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("py woy_get_file_and_line()\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_FILE_LINE, &wui_state, 0);
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_READ_WOY_FILE_LINE, wui_state, 0);
     // After calling a 'WOY API' command, clear the GDB previous command
-    error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));
+    error = IPC_write_cmd(ipc_ctx, cstr("echo\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
-
-    // find a symbol of type struct
-    /*for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {*/
-        /*WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;*/
-        /*if (symbol->basic_type == 3) {*/
-            /*uint node_id = wui_state.symbol_tree.nodes.items[i].id;*/
-
-            /*printf("Found struct [%s]\n", symbol->symbol_name.cstr);*/
-
-            /*{*/
-                /*strbuf_t *tmp = &symbol->symbol_name;*/
-                /*strbuf_cat(*/
-                    /*&aux_str,*/
-                    /*cstr("py woy_query_symbol(\""),*/
-                    /*strbuf_view(&tmp),*/
-                    /*cstr("\")\n")*/
-                /*);*/
-            /*}*/
-
-            /*printf("QUERY string [%s]\n", aux_str->cstr);*/
-
-/*[>error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));<]*/
-/*error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));*/
-/*ASSERT(error == 0);*/
-/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);*/
-/*// After calling a 'WOY API' command, clear the GDB previous command*/
-/*error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));*/
-/*ASSERT(error == 0);*/
-/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
-
-            /*break;*/
-        /*}*/
-    /*}*/
-
-    /*for (size_t i = 0; i < wui_state.symbol_tree.nodes.size; ++i) {*/
-        /*WuiSymbol *symbol = &wui_state.symbol_tree.nodes.items[i].item;*/
-        /*if (wui_state.symbol_tree.nodes.items[i].id == 7) {*/
-            /*uint node_id = wui_state.symbol_tree.nodes.items[i].id;*/
-
-            /*printf("Found struct [%s]\n", symbol->symbol_name.cstr);*/
-
-            /*{*/
-                /*strbuf_t *tmp = &symbol->symbol_name;*/
-                /*strbuf_cat(*/
-                    /*&aux_str,*/
-                    /*cstr("py woy_query_symbol(\""),*/
-                    /*strbuf_view(&tmp),*/
-                    /*cstr("\")\n")*/
-                /*);*/
-            /*}*/
-
-            /*printf("QUERY string [%s]\n", aux_str->cstr);*/
-
-/*[>error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));<]*/
-/*error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));*/
-/*ASSERT(error == 0);*/
-/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &wui_state, node_id);*/
-/*// After calling a 'WOY API' command, clear the GDB previous command*/
-/*error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));*/
-/*ASSERT(error == 0);*/
-/*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
-
-            /*break;*/
-        /*}*/
-    /*}*/
-
-
-    /*error = IPC_write_cmd(&ipc_ctx, cstr("py woy_query_symbol(\"client1_gs.ray_trails\")\n"));*/
-    /*ASSERT(error == 0);*/
-    /*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_READ_WOY_QUERY, &wui_state, 1);*/
-    /*// After calling a 'WOY API' command, clear the GDB previous command*/
-    /*error = IPC_write_cmd(&ipc_ctx, cstr("echo\n"));*/
-    /*ASSERT(error == 0);*/
-    /*IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
+    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
 
     // Raylib stuff
@@ -236,23 +164,23 @@ int main (void) {
     while (!WindowShouldClose()) // Detect window close button or ESC key
     {
 
-        GUI_draw_all(&wui_state);
+        GUI_draw_all(&ctx, wui_state);
 
     /*while(true) {*/
         /*sleep_ms(50);*/
-        /*CliPrompt_print_line(&cli_prompt, "i\n");*/
+        /*CliPrompt_print_line(cli_prompt, "i\n");*/
         // Logic loop
 
-        while (CliPrompt_handle_prompt(&cli_prompt)) {
+        while (CliPrompt_handle_prompt(cli_prompt)) {
 
             {
-                strbuf_t *tmp = &cli_prompt.input;
+                strbuf_t *tmp = &cli_prompt->input;
                 strbuf_cat(&aux_str, strbuf_view(&tmp), cstr("\n"));
             }
-            error = IPC_write_cmd(&ipc_ctx, strbuf_view(&aux_str));
+            error = IPC_write_cmd(ipc_ctx, strbuf_view(&aux_str));
             ASSERT(error == 0);
-            CliPrompt_clear(&cli_prompt);
-            IPC_wait_for_prompt(&ipc_ctx, &reader, &cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+            CliPrompt_clear(cli_prompt);
+            IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
         }
 
         /* ↓ EndDrawing() sleeps and during this time we can catch inputs. */
@@ -264,35 +192,8 @@ int main (void) {
 
     CloseWindow();
     GUI_cleanup();
-    WuiState_free(&wui_state);
+    ctx_free(&ctx);
 
-    /*kill(ipc_ctx.child_pid, SIGINT);*/
-    /*Fork_cleanup(&fork_ctx);*/
-
-    // Buffer overflow
-    /*int *list = (int*) malloc(sizeof(int) * 7);*/
-    /*if (0) {*/
-        /*list[8] = 888;*/
-        /*free(list);*/
-    /*}*/
-
-    /*// Use after free*/
-    /*int *p[10] = { 0 };*/
-    /*for (int i = 0; i < 10; ++i) {*/
-        /*p[0] = (int*) malloc(sizeof(int));*/
-    /*}*/
-    /**p[0] = 40;*/
-    /*if (1) {*/
-        /*free(p[1]);*/
-        /**p[1] = 10;*/
-    /*}*/
-
-    /*// Signed overflow*/
-    /*int x = INT_MAX;*/
-    /*++x;*/
-
-    /*// Invalid shift*/
-    /*int y = 1 << (*p[0]);*/
 
     return 0;
 }

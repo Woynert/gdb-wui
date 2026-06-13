@@ -1,0 +1,4 @@
+CompileFlags:
+    Add: [ -D__CLANGD__ ]
+    # Clang LSP doesn't report itself.
+    # Unfortunately required because of our stb-style code pattern.

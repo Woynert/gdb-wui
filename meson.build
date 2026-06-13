@@ -78,6 +78,8 @@ raygui_proj = subproject('raygui',
   default_options: [ 'default_library=static' ])
 raygui_dep = raygui_proj.get_variable('raygui_dep')
 
+gl_dep = dependency('gl') # Only needed to shut up clang LSP.
+
 # artifacts
 
 gdbwui_exe = executable(
@@ -88,7 +90,8 @@ gdbwui_exe = executable(
     raylib_dep,
     math_dep,
     raygui_dep,
-    mickstr_dep
+    mickstr_dep,
+    gl_dep
   ]
   ,c_args : my_extra_args
 )

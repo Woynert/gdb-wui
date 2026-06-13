@@ -19,7 +19,7 @@ static inline float float_clamp(float min, float max, float value) {
     return fmaxf(min, fminf(max, value)); }
 
 // Source - https://stackoverflow.com/a/1068937
-int int_digit_places (int n) {
+static int int_digit_places (int n) {
     if (n < 0) n = (n == INT_MIN) ? INT_MAX : -n;
     if (n < 10) return 1;
     if (n < 100) return 2;
@@ -41,7 +41,7 @@ int int_digit_places (int n) {
 #else
 #include <time.h> // nanosleep
 #endif
-void sleep_ms(int milliseconds){
+static void sleep_ms(int milliseconds){
 #ifdef WIN32
     Sleep(milliseconds);
 #else
@@ -58,7 +58,7 @@ void sleep_ms(int milliseconds){
 #include <sys/time.h>
 #endif
 
-long get_system_ms(void) {
+static long get_system_ms(void) {
 #ifdef _WIN32
     return GetTickCount64();
 #else // Linux, macOS, etc.
