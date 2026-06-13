@@ -201,6 +201,7 @@ int IPC_wait_for_prompt(
                 return_err = -1;
                 break;
             }
+            sleep_ms(5);
         }
 
         /* Found gdb prompt. */
@@ -227,7 +228,7 @@ int IPC_wait_for_prompt(
         }
 
         /* Found newline. */
-        else {
+        else if (line.size > 0) {
             if (ipc_do != IPC_WAIT_DO_HIDE) {
                 CliPrompt_print_line(cli_prompt, "|- %"PRIstr"\n", PRIstrarg(line));
             }
@@ -237,7 +238,6 @@ int IPC_wait_for_prompt(
         }
 
         IPCReader_consume_line(reader);
-        sleep_ms(5);
     }
 
     return return_err;
