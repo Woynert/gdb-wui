@@ -39,6 +39,7 @@ void WuiBreakpoint_init (WuiBreakpoint *bp) {
 #define WUI_SYMBOL_VALUE_STR_SIZE 100
 
 typedef struct WuiSymbol {
+    bool is_expanded; /* For queries. */
     int basic_type;
     union {
         strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _type_name;

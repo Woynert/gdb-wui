@@ -50,6 +50,15 @@ void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event) {
         return;
     }
 
+    if (symbol->is_expanded) {
+        SymbolTree_destroy_children(&ctx->wui_state.locals, node_id);
+        symbol->is_expanded = false;
+        return;
+    }
+
+    /* @note: Maybe move this down if we have early returns (failures). */
+    symbol->is_expanded = true; 
+
     /* @todo: Have a temp string to use when needed instead. */
     strbuf_t *aux_str = strbuf_create_empty(0, NULL);
     strbuf_t *aux_str_name = strbuf_create_empty(0, NULL);

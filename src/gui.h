@@ -254,8 +254,11 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
     Vector2 text_pos = { view_rect.x + PAD, view_rect.y };
     Rect2 selectable_area = {{ view_rect.x, text_pos.y, view_rect.width, LINE_HEIGHT }};
 
+    int counter = 0;
     SymbolTree_Iterator it = { 0 };
     while(SymbolTree_get_next(tree, &it)) {
+        ++counter;
+
         WuiSymbol *symbol = it.item;
         strbuf_empty(&gui_str);
 
@@ -312,7 +315,7 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
                 // DELME
             }
         } else {
-            selectable_area_color = (it.node_id % 2) == 0 ? GOLD : ORANGE;
+            selectable_area_color = (counter % 2) == 0 ? GOLD : ORANGE;
         }
         DrawRectangleRec(selectable_area.rect, selectable_area_color);
 
