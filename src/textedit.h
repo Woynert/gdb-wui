@@ -17,14 +17,12 @@
 #define DYNA__TYPE_UINT
 #define DYNA__TYPE uint
 #include "containers/da.h"
-#undef DYNA__TYPE
 #endif
 
 #ifndef DYNA__TYPE_INT
 #define DYNA__TYPE_INT
 #define DYNA__TYPE int
 #include "containers/da.h"
-#undef DYNA__TYPE
 #endif
 
 typedef struct Textedit_Change {
@@ -48,7 +46,6 @@ typedef struct TexteditVisualLine {
 
 #define DYNA__TYPE TexteditVisualLine
 #include "containers/da.h"
-#undef DYNA__TYPE
 
 #define TEXTEDIT_LOG_SIZE 256
 

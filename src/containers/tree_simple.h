@@ -19,8 +19,6 @@
  * #define TREESI__TYPE <type>
  * #define TREESI__NAMESPACE <custom name> (optional)
  * #include "tree_simple.h"
- * #undef  TREESI__TYPE
- * #undef  TREESI__NAMESPACE
 */
 
 /* User didn't specify type, using default. */
@@ -45,7 +43,6 @@ typedef struct {
 } TREESI__PRE(Node);
 
 #define DYNA__TYPE TREESI__PRE(Node)
-#undef DYNA__PREFIX
 #include "da.h"
 
 #define pfx(name) TREESI__PRE(name)
@@ -59,7 +56,8 @@ typedef struct {
 
 typedef struct {
     int __next_index;
-    int index;
+    int depth;
+    uint node_id;
     TYPE *item;
 } pfx(Iterator);
 
@@ -69,8 +67,11 @@ static void       pfx(clear)       (TreeSi *tree);
 static int        pfx(create_node) (TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item);
 static bool       pfx(get_next)    (const TreeSi *tree, pfx(Iterator) *it);
 static bool       pfx(node_exists) (const TreeSi *tree, uint node_id);
+static int        pfx(destroy_children)(TreeSi *tree, uint node_id);
 static int        pfx(destroy_node_and_children)(TreeSi *tree, uint node_id);
+static int        pfx(_destroy_node_and_children)(TreeSi *tree, uint node_id, bool destroy_self);
 static void       pfx(print)       (const TreeSi *tree);
+static TYPE      *pfx(get)         (const TreeSi *tree, uint node_id);
 static pfx(Node) *pfx(_find_node)  (const TreeSi *tree, uint node_id, int *out_node_index);
 
 
@@ -95,10 +96,23 @@ static void pfx(clear)(TreeSi *tree) {
 
 
 /*
+   @returns pfx(Node) or NULL
+*/
+static TYPE *pfx(get)(const TreeSi *tree, uint node_id) {
+    for (int i = 0; i < tree->nodes.size; ++i) {
+        if (tree->nodes.items[i].id == node_id) {
+            return &tree->nodes.items[i].item;
+        }
+    }
+    return NULL;
+}
+
+
+/*
    @param[out] out_node_index Optional
    @returns pfx(Node) or NULL
 */
-pfx(Node) *pfx(_find_node)(const TreeSi *tree, uint node_id, int *out_node_index) {
+static pfx(Node) *pfx(_find_node)(const TreeSi *tree, uint node_id, int *out_node_index) {
     for (int i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
             if (out_node_index != NULL) {
@@ -111,7 +125,7 @@ pfx(Node) *pfx(_find_node)(const TreeSi *tree, uint node_id, int *out_node_index
 }
 
 
-bool pfx(node_exists)(const TreeSi *tree, uint node_id) {
+static bool pfx(node_exists)(const TreeSi *tree, uint node_id) {
     for (int i = 0; i < tree->nodes.size; ++i) {
         if (tree->nodes.items[i].id == node_id) {
             return true;
@@ -126,7 +140,7 @@ bool pfx(node_exists)(const TreeSi *tree, uint node_id) {
    @param[out] out_node_id Optional
    @returns error
 */
-int pfx(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
+static int pfx(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
 {
     pfx(Node) parent_node = { 0 };
     int parent_index = 0;
@@ -166,7 +180,24 @@ int pfx(create_node)(TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item)
 /*
    @returns error
 */
-int pfx(destroy_node_and_children)(TreeSi *tree, uint node_id) {
+static int pfx(destroy_children)(TreeSi *tree, uint node_id) {
+    return pfx(_destroy_node_and_children)(tree, node_id, false);
+}
+
+
+/*
+   @returns error
+*/
+static int pfx(destroy_node_and_children)(TreeSi *tree, uint node_id) {
+    return pfx(_destroy_node_and_children)(tree, node_id, true);
+}
+
+
+/*
+   @returns error
+*/
+static int pfx(_destroy_node_and_children)(TreeSi *tree, uint node_id, bool destroy_self) {
+    int err;
     int node_index;
     pfx(Node) *node;
 
@@ -174,10 +205,14 @@ int pfx(destroy_node_and_children)(TreeSi *tree, uint node_id) {
     if (node == NULL) { return -1; }
 
     int parent_depth = node->depth;
-
     node = NULL;
-    int error = pfx(Node_Dyna_pop_at_preserve_order)(&tree->nodes, node_index);
-    if (error != 0) { return -2; };
+
+    if (destroy_self) {
+        err = pfx(Node_Dyna_pop_at_preserve_order)(&tree->nodes, node_index);
+        if (err != 0) { return -2; };
+    } else {
+        ++node_index;
+    }
 
     /* Not very efficient but good enough. Assumes order is hierarchical. */
     while(true) {
@@ -185,8 +220,8 @@ int pfx(destroy_node_and_children)(TreeSi *tree, uint node_id) {
         node = &tree->nodes.items[node_index];
         if (node->depth > parent_depth) {
             node = NULL;
-            error = pfx(Node_Dyna_pop_at_preserve_order)(&tree->nodes, node_index);
-            if (error != 0) { return -3; };
+            err = pfx(Node_Dyna_pop_at_preserve_order)(&tree->nodes, node_index);
+            if (err != 0) { return -3; };
         }
         else break;
     }
@@ -207,7 +242,8 @@ static bool pfx(get_next) (const TreeSi *tree, pfx(Iterator) *it) {
     }
 
     it->item = &tree->nodes.items[it->__next_index].item;
-    it->index = it->__next_index;
+    it->node_id = tree->nodes.items[it->__next_index].id;
+    it->depth = tree->nodes.items[it->__next_index].depth;
     ++it->__next_index;
     return true;
 }
@@ -230,11 +266,8 @@ void pfx(print)(const TreeSi *tree) {
 #undef TREESI__TOKCAT_
 #undef TREESI__TOKCAT
 #undef TREESI__PRE
-#undef DYNA__TYPE
-#undef DYNA__PREFIX
 #undef pfx
 #undef TYPE
 #undef TreeSi
-// Don't undef these since they are user generated:
-// TREESI__TYPE
-// TREESI__NAMESPACE
+#undef TREESI__TYPE
+#undef TREESI__NAMESPACE

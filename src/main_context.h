@@ -17,7 +17,6 @@ typedef struct Widget {
 
 #define DYNA__TYPE Widget
 #include "containers/da.h"
-#undef  DYNA__TYPE
 // MOVEME
 
 

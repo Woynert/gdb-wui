@@ -36,7 +36,6 @@ File File_create(void) {
 
 #define DYNA__TYPE File
 #include "./containers/da.h"
-#undef DYNA__TYPE
 
 typedef struct FileExplorer {
     union {
@@ -58,7 +57,6 @@ FileExplorer FileExplorer_create(void) {
 
 #define DYNA__TYPE strview_t
 #include "./containers/da.h"
-#undef DYNA__TYPE
 
 typedef struct FileViewer {
     union {

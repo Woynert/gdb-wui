@@ -6,6 +6,7 @@
 
 #include "raylib.h"
 #include "raygui.h"
+#include "src/events.h"
 #include "strbuf.h"
 #include "strview.h"
 #include "portable_utils.h"
@@ -183,7 +184,8 @@ int main (void) {
             IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
         }
 
-        /* ↓ EndDrawing() sleeps and during this time we can catch inputs. */
+        /* EndDrawing() sleeps and during this time we can catch inputs. */
+        WuiState_process_events(&ctx);
         BetterMouse_consume_all();
         EndDrawing();
     }

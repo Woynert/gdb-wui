@@ -107,4 +107,6 @@ static long get_system_ms(void) {
 
 #define PRIbool(arg) (arg ? "true" : "false")
 
+#define static_assert _Static_assert
+
 #endif

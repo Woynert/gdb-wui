@@ -90,7 +90,8 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
 /*
   @brief Builds the symbol tree
   @param symbol_id. If 0 will overwrite the entire tree. (Used for locals)
-                    Otherwise will append symbols as child of symbol_id.
+                    If not 0 will get symbol, clear children and append new ones.
+  @returns error.
 */
 int WoyInterp_interpret_symbols(
    WoyInterp *woy_interp, WuiState *wui_state, uint symbol_id
@@ -103,8 +104,11 @@ int WoyInterp_interpret_symbols(
    uint success = strnum_u32(line, 0, STRNUM_DEFAULT);
    if (!success) { return -1; }
 
-   if (symbol_id != 0 && !SymbolTree_node_exists(&wui_state->locals, symbol_id)) {
-      return -2;
+   if (symbol_id != 0) {
+      int err = SymbolTree_destroy_children(&wui_state->locals, symbol_id);
+      if (err != 0) {
+         return -3;
+      }
    }
 
    if (symbol_id == 0) {
@@ -163,6 +167,7 @@ int WoyInterp_interpret_symbols(
    return 0;
 }
 
+/* @returns Error. */
 int WoyInterp_interpret_file_line(WoyInterp *woy_interp, WuiState *wui_state) {
    strbuf_t *tmp = &woy_interp->buffer;
    strview_t src = strbuf_view(&tmp);

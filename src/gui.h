@@ -18,6 +18,7 @@
 #include "wui_state.h"
 #include "textedit.h"
 #include "main_context.h"
+#include "events.h"
 
 
 /* Notes:
@@ -256,8 +257,12 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
     SymbolTree_Iterator it = { 0 };
     while(SymbolTree_get_next(tree, &it)) {
         WuiSymbol *symbol = it.item;
+        strbuf_empty(&gui_str);
 
-        strbuf_printf(&gui_str, "%s%s = %s",
+        /* Depth. */
+        for (int i = 0; i < it.depth; ++i) { strbuf_append(&gui_str, cstr_SL("   ")); }
+
+        strbuf_append_printf(&gui_str, "%s%s = %s",
             GUI__symbol_is_expandable(symbol->basic_type) ? "> " : "  ",
             symbol->symbol_name.cstr,
             symbol->value.cstr
@@ -290,6 +295,11 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
         {
             selectable_area_color = BLUE;
             if (BetterMouse_is_pressed(MOUSE_LEFT_BUTTON)) {
+                WuiState_queue_event_symbol_query(&ctx->wui_state,
+                    (EventSymbolQuery) {
+                        .symbol_node_id = it.node_id,
+                    }
+                );
                 // DELME
                 //int err = IPC_write_cmd(&ipc_ctx, cstr("py woy_locals()\n"));
                 //if (err == 0) {
@@ -302,7 +312,7 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
                 // DELME
             }
         } else {
-            selectable_area_color = (it.index % 2) == 0 ? GOLD : ORANGE;
+            selectable_area_color = (it.node_id % 2) == 0 ? GOLD : ORANGE;
         }
         DrawRectangleRec(selectable_area.rect, selectable_area_color);
 
@@ -416,9 +426,9 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
 
     // Widget stack focus calculation.
     Widget_Dyna_clear_preserve(&ctx->widget_stack);
-    Widget widget_locals = GUI_register_widget(ctx, (Rect2) {{ 20, 500, 500, 300 }});
+    Widget widget_locals     = GUI_register_widget(ctx, (Rect2) {{ 20, 20, 500, 500 }});
     Widget widget_breakpoint = GUI_register_widget(ctx, (Rect2) {{ 20, 450, 200, 120 }});
-    Widget widget_textedit = GUI_register_widget(ctx, (Rect2) {{ 250, 100, 187, 150 }});
+    Widget widget_textedit   = GUI_register_widget(ctx, (Rect2) {{ 650, 200, 187, 150 }});
 
     // @Note: This "popup" system eventually has to be refactored away.
     // Include popup if opened.
@@ -436,7 +446,6 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
 
 
     GUI__calculate_focus(ctx);
-    printf("Currently the focused widget is %d\n", ctx->widget_focused_id);
 
     if (popup_is_open && ctx->widget_focused_id != widget_popup.id) {
         GUI_close_popup(-1);

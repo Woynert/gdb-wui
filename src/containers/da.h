@@ -17,9 +17,6 @@
  * #define DYNA__NAMESPACE <custom name> (optional)
  * #define DYNA__ENABLE_COMPARISONS      (optional)
  * #include "dyna.h"
- * #undef  DYNA__TYPE
- * #undef  DYNA__NAMESPACE
- * #undef  DYNA__ENABLE_COMPARISONS
 */
 
 /* User didn't specify type, using default. */
@@ -376,7 +373,6 @@ static int pfx(_round_up_capacity) (int capacity) {
 #undef pfx
 #undef TYPE
 #undef Dyna
-// Don't undef these since they are user generated:
-// DYNA__TYPE
-// DYNA__PREFIX
-// DYNA__ENABLE_COMPARISONS
+#undef DYNA__TYPE
+#undef DYNA__NAMESPACE
+#undef DYNA__ENABLE_COMPARISONS

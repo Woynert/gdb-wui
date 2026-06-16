@@ -62,10 +62,11 @@ def woy_locals() -> None:
 
 
 ## @param exp_str GDB query expresion string.
-## @param page (Optional) >1 Pagination for large structs/arrays
+## @param print_self (Optional) Omits itself.
+## @param page (TBD) (Optional) >1 Pagination for large structs/arrays
 ##                        0 Default, no pagination, returns all
 ##
-def woy_query_symbol(exp_str: str, page: int = 0) -> None:
+def woy_query_symbol(exp_str: str, print_self: bool = True) -> None:
 
     try:
         value: gdb.Value = gdb.parse_and_eval(exp_str)
@@ -77,7 +78,9 @@ def woy_query_symbol(exp_str: str, page: int = 0) -> None:
 
     print("1")
 
-    _woy_print_gdb_value(value, exp_str)
+    if print_self:
+        _woy_print_gdb_value(value, exp_str)
+
     # print("vvv")
 
     # memory might be out of reach (or garbage)

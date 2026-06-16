@@ -4,7 +4,6 @@
 #include "stdbool.h"
 #include "sys/types.h"
 #include "strbuf.h"
-#include "strview.h"
 #include "strbuf_extra.h"
 
 #define WUI_BREAKPOINT_STR_SIZE 255
@@ -67,16 +66,32 @@ void WuiSymbol_init (WuiSymbol *wui_symbol) {
     STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_address);
 }
 
+typedef enum EVENT {
+    EVENT_SYMBOL_QUERY,
+    EVENT_MAX,
+} EVENT;
+
+typedef struct EventSymbolQuery {
+    uint symbol_node_id;
+} EventSymbolQuery;
+
+typedef struct Event {
+    EVENT type;
+    union {
+        EventSymbolQuery event_symbol_query;
+    };
+} Event;
 
 #define DYNA__TYPE WuiBreakpoint
 #include "./containers/da.h"
-#undef DYNA__TYPE
 
 #define TREESI__TYPE WuiSymbol
 #define TREESI__NAMESPACE SymbolTree
 #include "./containers/tree_simple.h"
-#undef  TREESI__TYPE
-#undef  TREESI__NAMESPACE
+
+#define DYNA__TYPE Event
+#define DYNA__NAMESPACE Event_da
+#include "containers/da.h"
 
 typedef struct WuiState {
     WuiBreakpoint_Dyna breakpoints;
@@ -85,6 +100,8 @@ typedef struct WuiState {
     bool has_valid_location; /* Guards current file path and line. */
     strbuf_t *curr_file_path; /* Absolute path. */
     int curr_line;
+
+    Event_da events;
 } WuiState;
 
 void WuiState_init (WuiState *wui_state) {
@@ -92,12 +109,15 @@ void WuiState_init (WuiState *wui_state) {
     wui_state->breakpoints = WuiBreakpoint_Dyna_create();
     wui_state->locals = SymbolTree_create();
     wui_state->curr_file_path = strbuf_create(0, NULL);
+    wui_state->events = Event_da_create();
 }
 
 void WuiState_free (WuiState *wui_state) {
     WuiBreakpoint_Dyna_free(&wui_state->breakpoints);
     SymbolTree_free(&wui_state->locals);
     strbuf_destroy(&wui_state->curr_file_path);
+    Event_da_free(&wui_state->events);
+    *wui_state = (WuiState) { 0 };
 }
 
 #endif // !WUI_STATE

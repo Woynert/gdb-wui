@@ -241,10 +241,9 @@ int IPC_wait_for_prompt(
             if (ipc_do == IPC_WAIT_DO_READ_WOY_BREAKPOINTS) {
                 WoyInterp_interpret_breakpoints(&woy_interp, wui_state);
             } else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
-                int err2 = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
-                ASSERT(err2 == 0);
+                return_err = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
             } else if (ipc_do == IPC_WAIT_DO_READ_WOY_FILE_LINE) {
-                WoyInterp_interpret_file_line(&woy_interp, wui_state);
+                return_err = WoyInterp_interpret_file_line(&woy_interp, wui_state);
             }
 
             WoyInterp_reset(&woy_interp);
