@@ -6,12 +6,26 @@
 #include "wui_state.h"
 #include "ipc.h"
 
+typedef enum WIDGET {
+    WIDGET_NONE,
+    WIDGET_BREAKPOINTS,
+    WIDGET_LOCALS,
+    WIDGET_TEXTEDIT,
+    WIDGET_MAX,
+} WIDGET;
+
 
 // MOVEME
 typedef struct Widget {
-    int id;
+    bool is_focused; /* Draw only, see ctx.widget_focused_id. */
+    WIDGET type;
     Rect2 area;
+
+    bool is_scrollable;
+    int scroll_px;
+    int max_scroll_px_h;
 } Widget;
+
 
 #define WIDGET_INVALID ((Widget) { .id = -10, .area = (Rect2) {{ 0 }} })
 
@@ -32,13 +46,28 @@ typedef struct Ctx {
     };
 } Ctx;
 
+
 void ctx_init(Ctx *ctx) {
     *ctx = (Ctx) { 0 };
     WuiState_init(&ctx->wui_state);
     IPCReader_init(&ctx->reader);
     CliPrompt_init(&ctx->cli_prompt);
 
+    // MOVEME
     ctx->widget_stack = Widget_Dyna_create();
+    Widget_Dyna_append(&ctx->widget_stack, (Widget) {
+        .type = WIDGET_LOCALS,
+        .area = (Rect2) {{ 20, 20, 500, 500 }},
+    });
+    Widget_Dyna_append(&ctx->widget_stack, (Widget) {
+        .type = WIDGET_BREAKPOINTS,
+        .area = (Rect2) {{ 20, 450, 200, 120 }},
+    });
+    Widget_Dyna_append(&ctx->widget_stack, (Widget) {
+        .type = WIDGET_TEXTEDIT,
+        .area = (Rect2) {{ 650, 200, 187, 150 }},
+    });
+    // MOVEME
 }
 
 void ctx_free(Ctx *ctx) {
