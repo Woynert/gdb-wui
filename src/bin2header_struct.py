@@ -42,7 +42,7 @@ def bin2header(infile, outfile, var_name):
 
     i = 0
     while file_size_bytes > 0:
-        outfile.write('char s{}[{}];\n'.format(i,
+        outfile.write('char s{}[{}] __attribute__ ((nonstring));\n'.format(i,
                         min(file_size_bytes, BYTES_PER_BUFFER)))
         file_size_bytes -= BYTES_PER_BUFFER
         i += 1

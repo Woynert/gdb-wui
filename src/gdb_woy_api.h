@@ -9,8 +9,8 @@ extern const size_t PYTHON_CODE_len;
 
 #ifdef EMBEDDED_BIN_IMPLEMENTATION__PYTHON_CODE
 const struct {
-char s0[4095];
-char s1[3132];
+char s0[4095] __attribute__ ((nonstring));
+char s1[3132] __attribute__ ((nonstring));
 } PYTHON_CODE_struct = {
 "\x69\x6d\x70\x6f\x72\x74\x20\x67\x64\x62\x2e\x74\x79\x70\x65\x73\x0a\x66\x72\x6f\x6d"
 "\x20\x74\x79\x70\x69\x6e\x67\x20\x69\x6d\x70\x6f\x72\x74\x20\x53\x65\x74\x2c\x20\x4c"
