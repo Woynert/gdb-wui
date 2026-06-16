@@ -12,6 +12,33 @@ void WuiState_queue_event_symbol_query(WuiState *w, EventSymbolQuery event) {
     Event_da_append(&w->events, (Event){ .type = EVENT_SYMBOL_QUERY, .event_symbol_query = event });
 }
 
+/* @Note: Might wanna not use recursion. */
+void get_symbol_absolute_name(WuiState *w, uint node_id, strbuf_t **buf);
+void get_symbol_absolute_name(WuiState *w, uint node_id, strbuf_t **buf) {
+
+    uint parent_node_id = 0;
+    int res = SymbolTree_get_parent(&w->locals, node_id, &parent_node_id);
+    bool has_parent = res == 0;
+    printfd("Found parent %d", has_parent);
+
+    if (has_parent) {
+        printfd("Node %d has parent %d", node_id, parent_node_id);
+
+        get_symbol_absolute_name(w, parent_node_id, buf);
+
+        strbuf_append_printf(buf, ".");
+    }
+
+    WuiSymbol *symbol = SymbolTree_get(&w->locals, node_id);
+    if (symbol == NULL) {
+        printfd("ERR: No symbol (node id %d)", node_id);
+        return;
+    }
+
+    strbuf_append(buf, strbuf_view2(&symbol->symbol_name));
+    return;
+}
+
 void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event) {
     int err;
     uint node_id = event.symbol_node_id;
@@ -25,9 +52,14 @@ void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event) {
 
     /* @todo: Have a temp string to use when needed instead. */
     strbuf_t *aux_str = strbuf_create_empty(0, NULL);
+    strbuf_t *aux_str_name = strbuf_create_empty(0, NULL);
+
+    get_symbol_absolute_name(&ctx->wui_state, node_id, &aux_str_name);
+    printfd("Absolute name '%"PRIstr"'", PRIstrarg(strbuf_view2(aux_str_name)));
+
 
     strbuf_printf(&aux_str, "py woy_query_symbol(\"%"PRIstr"\", False)\n",
-            PRIstrarg(strbuf_view2(&symbol->symbol_name)));
+            PRIstrarg(strbuf_view2(aux_str_name)));
 
     printfd("Query is %"PRIstr"", PRIstrarg(strbuf_view(&aux_str)));
 
@@ -43,6 +75,7 @@ void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event) {
             IPC_WAIT_DO_NOTHING, NULL, 0);
 
     strbuf_destroy(&aux_str);
+    strbuf_destroy(&aux_str_name);
 }
 
 void WuiState_process_events(Ctx *ctx) {

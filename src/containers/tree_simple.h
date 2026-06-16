@@ -2,23 +2,28 @@
 #include "stdio.h"
 
 /*
- * Simple tree data structure.
- *
- * Nodes are stored in a flat array hierarchically. For example the tree:
- *
- * - 1
- *    - 2
- *        - 4
- *    - 3
- *
- * Would be stored as: [1, 2, 4, 3].
- * Inserting 5 under 4 would look like this: [1, 2, 4, 5, 3].
- *
- * Usage:
- *
- * #define TREESI__TYPE <type>
- * #define TREESI__NAMESPACE <custom name> (optional)
- * #include "tree_simple.h"
+
+   Simple tree data structure.
+
+   * Node id 0 is reserved for root.
+   * Root is not a Node.
+   * Nodes with parent_id 0 are children of root.
+   * Nodes are stored in a flat array hierarchically. For example the tree:
+
+   - 1
+      - 2
+          - 4
+      - 3
+
+   Would be stored as: [1, 2, 4, 3].
+   Inserting 5 under 4 would look like this: [1, 2, 4, 5, 3].
+
+   * Usage:
+
+   #define TREESI__TYPE <type>
+   #define TREESI__NAMESPACE <custom name> (optional)
+   #include "tree_simple.h"
+
 */
 
 /* User didn't specify type, using default. */
@@ -64,8 +69,10 @@ typedef struct {
 static TreeSi     pfx(create)      (void);
 static void       pfx(free)        (TreeSi *tree);
 static void       pfx(clear)       (TreeSi *tree);
+static void       pfx(_reset)      (TreeSi *tree);
 static int        pfx(create_node) (TreeSi *tree, uint parent_id, uint *out_node_id, TYPE item);
 static bool       pfx(get_next)    (const TreeSi *tree, pfx(Iterator) *it);
+static int        pfx(get_parent)  (const TreeSi *tree, uint node_id, uint *out_parent_id);
 static bool       pfx(node_exists) (const TreeSi *tree, uint node_id);
 static int        pfx(destroy_children)(TreeSi *tree, uint node_id);
 static int        pfx(destroy_node_and_children)(TreeSi *tree, uint node_id);
@@ -75,23 +82,29 @@ static TYPE      *pfx(get)         (const TreeSi *tree, uint node_id);
 static pfx(Node) *pfx(_find_node)  (const TreeSi *tree, uint node_id, int *out_node_index);
 
 
+static void pfx(_reset)(TreeSi *tree) {
+    tree->id_counter = 1;
+}
+
+
 static TreeSi pfx(create)(void) {
     TreeSi tree = { 0 };
-    tree.id_counter = 1;
     tree.nodes = pfx(Node_Dyna_create)(); /* @note: Can't fail. */
+    pfx(_reset)(&tree);
     return tree;
 }
 
 
 static void pfx(free)(TreeSi *tree) {
-    tree->id_counter = 0;
     pfx(Node_Dyna_free)(&tree->nodes);
+    *tree = (TreeSi) { 0 };
+    pfx(_reset)(tree);
 }
 
 
 static void pfx(clear)(TreeSi *tree) {
-    tree->id_counter = 0;
     pfx(Node_Dyna_clear_preserve)(&tree->nodes);
+    pfx(_reset)(tree);
 }
 
 
@@ -134,6 +147,31 @@ static bool pfx(node_exists)(const TreeSi *tree, uint node_id) {
     return false;
 }
 
+/* 
+   @param[out] out_parent_id Node parent id.
+   @returns error
+*/
+static int pfx(get_parent) (const TreeSi *tree, uint node_id, uint *out_parent_id) {
+    if (node_id == 0) { return -1; } /* Root has no parent. */
+    int depth = 0;
+    bool found = false;
+
+    for (int i = tree->nodes.size-1; i > -1; --i) {
+        pfx(Node) *node = &tree->nodes.items[i];
+        if (!found) {
+            if (node->id == node_id) {
+                found = true;
+                depth = node->depth;
+                if (depth == 0) { return -1; } /* Root level. */
+            }
+        } else if (node->depth < depth) {
+            *out_parent_id = node->id;
+            return 0;
+        }
+    }
+
+    return -1;
+}
 
 /*
    @param parent_id. If 0 node will be added to root.
