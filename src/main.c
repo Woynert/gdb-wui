@@ -24,9 +24,26 @@
 #include "ipc.h"
 
 
-/*void away(int *p) {*/
-    /**p = 9;*/
-/*}*/
+void glfw_mouse_callback(GLFWwindow* w, int button, int action, int mods) {
+    BetterMouse_glfw_mouse_button_callback(w, button, action, mods);
+}
+
+
+void glfw_scroll_callback(GLFWwindow* w, double xoffset, double yoffset) {
+    BetterMouse_glfw_scroll_callback(w, xoffset, yoffset);
+}
+
+
+int hook_glfw_callbacks(Ctx *ctx) {
+    GLFWwindow* window = (GLFWwindow*)GetWindowHandle();
+    glfwSetWindowUserPointer(window, ctx);
+    if (glfwSetMouseButtonCallback(window, glfw_mouse_callback) == NULL) { return 1; }
+    if (glfwSetScrollCallback(window, glfw_scroll_callback) == NULL) { return 1; }
+    /*if (glfwSetKeyCallback(window, glfw_kb_callback) == NULL) { return 1; }*/
+    /*if (glfwSetCharCallback(window, glfw_char_callback) == NULL) { return 1; }*/
+    /*if (glfwSetWindowFocusCallback(window, glfw_focus_callback) == NULL) { return 1; }*/
+    return 0;
+}
 
 
 int main (void) {
@@ -114,7 +131,7 @@ int main (void) {
     InitWindow(screenWidth, screenHeight, "WUI");
     SetTargetFPS(30);
 
-    BetterMouse_hook_events();
+    hook_glfw_callbacks(&ctx);
     GUI_init_global_context();
 
     textedit_toggle_line_numbers(&GUI.textedit, true);

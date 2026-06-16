@@ -192,9 +192,9 @@ void GUI_close_popup(int option_selected) {
 //} GuiBreakpointView;
 
 
-void GUI_draw_breakpoints(Ctx *ctx, WuiState *state, Widget widget) {
+void GUI_draw_breakpoints(Ctx *ctx, WuiState *state, Widget *widget) {
 
-    Rect2 view_rect = widget.area;
+    Rect2 view_rect = widget->area;
 
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
@@ -219,7 +219,7 @@ void GUI_draw_breakpoints(Ctx *ctx, WuiState *state, Widget widget) {
 
     // Open context menu.
 
-    if (widget.is_focused
+    if (widget->is_focused
         && CheckCollisionPointRec(GetMousePosition(), view_rect.rect)
         && BetterMouse_is_pressed(MOUSE_BUTTON_RIGHT)
     ) {
@@ -239,8 +239,8 @@ bool GUI__symbol_is_expandable(int symbol_type) {
     /* Symbol is ARRAY o pointer to STRUCT. */
 }
 
-void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
-    Rect2 view_rect = widget.area;
+void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget *widget) {
+    Rect2 view_rect = widget->area;
 
     BeginTextureMode(GUI.aux_texture);
     DrawRectangleRec(view_rect.rect, GRAY);
@@ -292,7 +292,7 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
         selectable_area.height = LINE_HEIGHT * (it_all_fits ? 1 : 2);
         Color selectable_area_color;
 
-        if (widget.is_focused && CheckCollisionPointRec(GetMousePosition(), selectable_area.rect))
+        if (widget->is_focused && CheckCollisionPointRec(GetMousePosition(), selectable_area.rect))
         {
             selectable_area_color = BLUE;
             if (BetterMouse_is_pressed(MOUSE_LEFT_BUTTON)) {
@@ -335,12 +335,14 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget widget) {
         selectable_area.y = text_pos.y;
     }
 
+    Widget_report_max_height(widget, (int)(selectable_area.y + selectable_area.height));
+
     DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
     EndTextureMode();
 }
 
 
-void GUI_draw_locals(Ctx *ctx, WuiState *state, Widget widget) {
+void GUI_draw_locals(Ctx *ctx, WuiState *state, Widget *widget) {
     GUI_draw_symbol_tree(ctx, &state->locals, widget);
 }
 
@@ -441,27 +443,42 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
     GUI__calculate_focus(ctx);
 
     for (int i = 0; i < ctx->widget_stack.size; ++i) {
-        Widget widget = ctx->widget_stack.items[i];
-        widget.is_focused = ctx->widget_focused_id == i;
+        Widget *widget = &ctx->widget_stack.items[i];
+        widget->is_focused = ctx->widget_focused_id == i;
+
+        Widget widget_draw = *widget;
+
+        if (widget->is_scrollable) {
+            const int SCROLL_PX = 20;
+
+            // Read scroll.
+            int scroll = (int)BetterMouse_mouse_wheel();
+            if (scroll != 0) {
+                widget->scroll_px += scroll * SCROLL_PX;
+            }
+
+            // Apply scroll.
+            widget_draw.area.y += (float)widget->scroll_px;
+        }
 
         static_assert(WIDGET_MAX == 4, "Enum changed.");
-        switch (widget.type) {
+        switch (widget->type) {
             case WIDGET_NONE: break;
             case WIDGET_BREAKPOINTS:
             {
-                GUI_draw_breakpoints(ctx, state, widget);
+                GUI_draw_breakpoints(ctx, state, &widget_draw);
                 BeginTextureMode(GUI.final_texture);
                 DrawTextureRec_flipped(GUI.aux_texture.texture,
-                        widget.area.rect, widget.area.pos, WHITE);
+                        widget->area.rect, widget->area.pos, WHITE);
                 EndTextureMode();
                 break;
             }
             case WIDGET_LOCALS:
             {
-                GUI_draw_locals(ctx, state, widget);
+                GUI_draw_locals(ctx, state, &widget_draw);
                 BeginTextureMode(GUI.final_texture);
                 DrawTextureRec_flipped(GUI.aux_texture.texture,
-                        widget.area.rect, widget.area.pos, WHITE);
+                        widget->area.rect, widget->area.pos, WHITE);
                 EndTextureMode();
                 break;
             }

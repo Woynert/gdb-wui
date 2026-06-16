@@ -5,13 +5,34 @@
 #include "raylib.h"
 #include "stdbool.h"
 #include "assert.h"
-#include "stdio.h"
 
 /*
-    USAGE: Modify your main loop to include this functions:
+    USAGE:
 
-        InitWindow(...);
-        BetterMouse_hook_events(); <-- Call after InitWindow.
+    Step 1: Hook GLFW events from your application:
+
+        void glfw_mouse_callback(GLFWwindow* w, int button, int action, int mods) {
+            BetterMouse_glfw_mouse_button_callback(w, button, action, mods);
+        }
+
+        void glfw_scroll_callback(GLFWwindow* w, double xoffset, double yoffset) {
+            BetterMouse_glfw_scroll_callback(w, xoffset, yoffset);
+        }
+
+        void hook_glfw_callbacks(void) {
+            assert(glfwSetMouseButtonCallback(window, glfw_mouse_callback));
+            assert(glfwSetScrollCallback(window, glfw_scroll_callback));
+            return 0;
+        }
+
+        main (...) {
+            ...
+            InitWindow(...);
+            hook_glfw_callbacks(); <-- Call after InitWindow.
+            ...
+        }
+
+    Step 2: Modify your main loop to include this functions:
 
         while (!WindowShouldClose()) {
             ... Drawing ...
@@ -19,90 +40,108 @@
             EndDrawing();
         }
 
-    Then use API like BetterMouse_is_pressed(MOUSE_BUTTON_LEFT).
+    API:
+
+        bool BetterMouse_is_pressed(MouseButton);
+        bool BetterMouse_is_held(MouseButton);
+        bool BetterMouse_is_released(MouseButton);
+        float BetterMouse_mouse_wheel();
+        float BetterMouse_mouse_wheel_h();
+
     Currently it supports LEFT, RIGHT, and MIDDLE button from raylib:
-    typedef enum {
+
         MOUSE_BUTTON_LEFT    = 0,
         MOUSE_BUTTON_RIGHT   = 1,
         MOUSE_BUTTON_MIDDLE  = 2,
-        ...
-    } MouseButton;
  */
 
-/* 0 pressed, 1 held, 2 released */
-static bool BetterMouse__input [MOUSE_BUTTON_MIDDLE+1][3] = { 0 };
 
-void BetterMouse__mouse_additive_cb(GLFWwindow* w, int button, int action, int mods)
+static struct {
+    bool button [MOUSE_BUTTON_MIDDLE+1][3]; /* 0 pressed, 1 held, 2 released */
+    float wheel_x;
+    float wheel_y;
+} BetterMouse__state = { 0 };
+
+
+void BetterMouse_glfw_mouse_button_callback(GLFWwindow* w, int button, int action, int mods)
 {
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
-            BetterMouse__input[MOUSE_BUTTON_LEFT][0] = true;
-            BetterMouse__input[MOUSE_BUTTON_LEFT][1] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_LEFT][0] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_LEFT][1] = true;
         } else if (action == GLFW_RELEASE) {
-            BetterMouse__input[MOUSE_BUTTON_LEFT][2] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_LEFT][2] = true;
         }
     }
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (action == GLFW_PRESS) {
-            BetterMouse__input[MOUSE_BUTTON_RIGHT][0] = true;
-            BetterMouse__input[MOUSE_BUTTON_RIGHT][1] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_RIGHT][0] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_RIGHT][1] = true;
         } else if (action == GLFW_RELEASE) {
-            BetterMouse__input[MOUSE_BUTTON_RIGHT][2] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_RIGHT][2] = true;
         }
     }
     if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
         if (action == GLFW_PRESS) {
-            BetterMouse__input[MOUSE_BUTTON_MIDDLE][0] = true;
-            BetterMouse__input[MOUSE_BUTTON_MIDDLE][1] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_MIDDLE][0] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_MIDDLE][1] = true;
         } else if (action == GLFW_RELEASE) {
-            BetterMouse__input[MOUSE_BUTTON_MIDDLE][2] = true;
+            BetterMouse__state.button[MOUSE_BUTTON_MIDDLE][2] = true;
         }
     }
 }
 
-/* Call after InitWindow. */
-void BetterMouse_hook_events(void) {
-    GLFWwindow* w = (GLFWwindow*)GetWindowHandle();
-    GLFWmousebuttonfun callback = glfwSetMouseButtonCallback(w, BetterMouse__mouse_additive_cb);
-    assert(callback != NULL);
-    int error_code = glfwGetError(NULL);
-    if (error_code != GLFW_NO_ERROR) {
-        printf("Failed to set mouse callback. Error code: %d\n", error_code);
-    }
+
+void BetterMouse_glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    BetterMouse__state.wheel_y = (float)yoffset;
+    BetterMouse__state.wheel_x = (float)xoffset;
 }
+
 
 /* Call at frame end. */
 void BetterMouse_consume_all(void) {
     for (int i = MOUSE_BUTTON_LEFT; i <= MOUSE_BUTTON_MIDDLE; ++i) {
-        BetterMouse__input[i][0] = false;
-        if (BetterMouse__input[i][2]) {
+        BetterMouse__state.button[i][0] = false;
+        if (BetterMouse__state.button[i][2]) {
             /* Held is reset only when Released was triggered. */
-            BetterMouse__input[i][1] = false;
+            BetterMouse__state.button[i][1] = false;
         }
-        BetterMouse__input[i][2] = false;
+        BetterMouse__state.button[i][2] = false;
     }
+
+    BetterMouse__state.wheel_x = 0;
+    BetterMouse__state.wheel_y = 0;
 }
 
 void BetterMouse_consume(MouseButton button, bool trigger_release) {
     assert(button <= MOUSE_BUTTON_MIDDLE);
-    BetterMouse__input[button][0] = false;
-    BetterMouse__input[button][1] = false;
-    BetterMouse__input[button][2] = trigger_release;
+    BetterMouse__state.button[button][0] = false;
+    BetterMouse__state.button[button][1] = false;
+    BetterMouse__state.button[button][2] = trigger_release;
 }
 
 bool BetterMouse_is_pressed(MouseButton button) {
     assert(button <= MOUSE_BUTTON_MIDDLE);
-    return BetterMouse__input[button][0];
+    return BetterMouse__state.button[button][0];
 }
 
 bool BetterMouse_is_held(MouseButton button) {
     assert(button <= MOUSE_BUTTON_MIDDLE);
-    return BetterMouse__input[button][1];
+    return BetterMouse__state.button[button][1];
 }
 
 bool BetterMouse_is_released(MouseButton button) {
     assert(button <= MOUSE_BUTTON_MIDDLE);
-    return BetterMouse__input[button][2];
+    return BetterMouse__state.button[button][2];
+}
+
+float BetterMouse_mouse_wheel(void) {
+    return BetterMouse__state.wheel_y;
+}
+
+float BetterMouse_mouse_wheel_h(void) {
+    return BetterMouse__state.wheel_x;
 }
 
 #endif // !BETTER_MOUSE_INPUT_H

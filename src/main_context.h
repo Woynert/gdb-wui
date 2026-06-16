@@ -23,8 +23,13 @@ typedef struct Widget {
 
     bool is_scrollable;
     int scroll_px;
-    int max_scroll_px_h;
+    int max_height_px; /* Draw function can set this value. */
 } Widget;
+
+
+void Widget_report_max_height(Widget *w, int height) {
+    w->max_height_px = height;
+}
 
 
 #define WIDGET_INVALID ((Widget) { .id = -10, .area = (Rect2) {{ 0 }} })
@@ -58,10 +63,12 @@ void ctx_init(Ctx *ctx) {
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
         .type = WIDGET_LOCALS,
         .area = (Rect2) {{ 20, 20, 500, 500 }},
+        .is_scrollable = true,
     });
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
         .type = WIDGET_BREAKPOINTS,
         .area = (Rect2) {{ 20, 450, 200, 120 }},
+        .is_scrollable = true,
     });
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
         .type = WIDGET_TEXTEDIT,
