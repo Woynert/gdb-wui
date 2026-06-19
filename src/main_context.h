@@ -22,6 +22,7 @@ typedef struct Widget {
     Rect2 area;
 
     bool is_scrollable;
+    bool show_scrollbar;
     int scroll_px;
     int max_height_px; /* Draw function can set this value. */
 } Widget;

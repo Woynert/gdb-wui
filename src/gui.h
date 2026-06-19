@@ -412,6 +412,7 @@ void GUI__calculate_focus(Ctx *ctx) {
     ctx->widget_focused_id = -1;
 }
 
+#define SCROLLBAR_WIDTH_PX 2
 
 void GUI_draw_all(Ctx *ctx, WuiState *state) {
     BeginTextureMode(GUI.final_texture);
@@ -450,7 +451,7 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
 
             // Scroll.
 
-            const int SCROLL_PX = 40;
+            const int SCROLL_PX = 60;
             int scroll = (int)BetterMouse_mouse_wheel();
             if (scroll != 0) {
                 widget->scroll_px -= scroll * SCROLL_PX;
@@ -461,6 +462,12 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
 
             /* Apply scroll. */
             widget_draw.area.y -= (float)widget->scroll_px;
+
+            widget->show_scrollbar = max_scroll > 0;
+
+            if (widget->show_scrollbar) {
+                widget_draw.area.width -= SCROLLBAR_WIDTH_PX;
+            }
         }
 
         static_assert(WIDGET_MAX == 4, "Enum changed.");
@@ -481,6 +488,23 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
                 BeginTextureMode(GUI.final_texture);
                 DrawTextureRec_flipped(GUI.aux_texture.texture,
                         widget->area.rect, widget->area.pos, WHITE);
+
+                /* Draw scrollbar. */
+
+                if (widget->is_scrollable && widget->show_scrollbar) {
+                    Rect2 scrollbar_bg = widget->area;
+                    scrollbar_bg.x = widget->area.x + widget->area.width - SCROLLBAR_WIDTH_PX;
+                    scrollbar_bg.width = SCROLLBAR_WIDTH_PX;
+                    DrawRectangleRec(scrollbar_bg.rect, DARKGRAY);
+
+                    if (widget->max_height_px != 0) {
+                        Rect2 scrollbar_fg = scrollbar_bg;
+                        scrollbar_fg.height = (widget->area.height / (float)widget->max_height_px) * widget->area.height;
+                        scrollbar_fg.y += ((float)widget->scroll_px / (float)widget->max_height_px) * widget->area.height;
+                        DrawRectangleRec(scrollbar_fg.rect, BLUE);
+                    }
+                }
+
                 EndTextureMode();
                 break;
             }
