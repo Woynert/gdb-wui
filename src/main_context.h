@@ -5,6 +5,7 @@
 #include "raylib_extra.h"
 #include "wui_state.h"
 #include "ipc.h"
+#include "textedit.h"
 
 typedef enum WIDGET {
     WIDGET_NONE,
@@ -50,6 +51,8 @@ typedef struct Ctx {
         Widget_Dyna widget_stack;
         int widget_focused_id;
     };
+
+    Textedit textedit;
 } Ctx;
 
 
@@ -58,6 +61,7 @@ void ctx_init(Ctx *ctx) {
     WuiState_init(&ctx->wui_state);
     IPCReader_init(&ctx->reader);
     CliPrompt_init(&ctx->cli_prompt);
+    textedit_init(&ctx->textedit);
 
     // MOVEME
     ctx->widget_stack = Widget_Dyna_create();
@@ -82,6 +86,7 @@ void ctx_free(Ctx *ctx) {
     WuiState_free(&ctx->wui_state);
     IPCReader_free(&ctx->reader);
     //CliPrompt_free(&ctx->cli_prompt);
+    textedit_free(&ctx->textedit);
 
     Widget_Dyna_free(&ctx->widget_stack);
 

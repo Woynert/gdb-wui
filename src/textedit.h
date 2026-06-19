@@ -110,6 +110,7 @@ void textedit_set_editable(Textedit *textedit, bool value);
 void textedit_toggle_line_numbers(Textedit *textedit, bool value);
 bool textedit_is_unicode_in_range(int unicode);
 void textedit_draw(Textedit *textedit, Rect2 view_rect, Font font, float font_size, float font_spacing, float font_width);
+void textedit_debug_draw(const Textedit *textedit, Vector2 pos, Font font, float font_size, float font_spacing);
 
 void textedit__update_linebreaks(Textedit *textedit, int startindex);
 void textedit__update_selection(Textedit *textedit, bool shift_pressed, int cursor_prev_pos);
@@ -120,7 +121,6 @@ void textedit__find_cursor_visual_line(Textedit *textedit);
 void textedit__find_visualline_corresponding_to_scroll(Textedit *textedit);
 void textedit__reset_cursor_blink(Textedit *textedit);
 void textedit__force_focus_cursor(Textedit *textedit);
-void textedit__debug_draw(const Textedit *textedit, Vector2 pos, Font font, float font_size, float font_spacing);
 
 void textedit__scroll_down(Textedit *textedit);
 void textedit__scroll_up(Textedit *textedit);
@@ -559,7 +559,7 @@ void textedit__reset_cursor_blink(Textedit *textedit) {
     textedit->cursor_blink_timestamp_secs = GetTime();
 }
 
-void textedit__debug_draw(
+void textedit_debug_draw(
     const Textedit *textedit, Vector2 pos,
     Font font, float font_size, float font_spacing
 ) {
@@ -871,8 +871,6 @@ void textedit_draw(
     Textedit *textedit, Rect2 view_rect,
     Font font, float font_size, float font_spacing, float font_width
 ) {
-    //BeginTextureMode(GUI.aux_texture);
-    DrawRectangleRec(view_rect.rect, GRAY);
 
     float line_spacing = 2;
     float line_height = font_size + line_spacing;
@@ -884,9 +882,7 @@ void textedit_draw(
     textedit->visible_cols = (int)floorf((view_rect.width - number_padding) /
                     (font_width + font_spacing));
 
-    /*
-     * Some of these variables only need to be updated on cursor change
-     */
+    /* Some of these variables only need to be updated on cursor change. */
 
     strview_t source = strbuf_view2(textedit->buffer);
     float fontSize = font_size;
@@ -904,12 +900,9 @@ void textedit_draw(
         );
     }
 
-    /* Get cursor visual line */
+    /* Get cursor visual line. */
 
     textedit__find_cursor_visual_line(textedit);
-
-    /* Find visualline_corresponding_to_scroll */
-
     textedit__find_visualline_corresponding_to_scroll(textedit);
     int visualline_start = textedit->viline_corresponding_to_scroll
                      + textedit->wrap_scroll;
@@ -918,6 +911,13 @@ void textedit_draw(
     );
     visualline_start = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_start);
     visualline_end   = int_clamp(0, (int)textedit->visualblocks.size -1, visualline_end);
+
+
+
+    /* DRAW STARTS HERE. */
+
+    DrawRectangleRec(view_rect.rect, GRAY);
+
 
 
 
@@ -1117,19 +1117,9 @@ void textedit_draw(
 
     }
     DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
-    //EndTextureMode();
 
 
-
-    // Debug drawing.
-
-    if ((1)) {
-        textedit__debug_draw(
-            textedit,
-            (Vector2){view_rect.x +view_rect.width, view_rect.y},
-            font, font_size, font_spacing);
-    }
-
+    /* DRAW ENDS HERE. */
 
 
     // Keyboard edit controls.
@@ -1196,7 +1186,6 @@ void textedit_draw(
 
         textedit__force_focus_cursor(textedit);
     }
-
 }
 
 #endif // !TEXTEDIT_H

@@ -62,6 +62,8 @@ int main (void) {
     IPCCtx *ipc_ctx = &ctx.ipc_ctx;
     IPCReader *reader = &ctx.reader;
     CliPrompt *cli_prompt = &ctx.cli_prompt;
+    Textedit *textedit = &ctx.textedit;
+
 
     strbuf_space_t(GDB_BUFFER_SIZE) _aux_str = STRBUF_STATIC_INIT(GDB_BUFFER_SIZE);
     strbuf_t *aux_str = (strbuf_t*)(&_aux_str);
@@ -134,9 +136,9 @@ int main (void) {
     hook_glfw_callbacks(&ctx);
     GUI_init_global_context();
 
-    textedit_toggle_line_numbers(&GUI.textedit, true);
-    textedit_set_editable(&GUI.textedit, false);
-    textedit_enable(&GUI.textedit, cstr(
+    textedit_toggle_line_numbers(textedit, true);
+    textedit_set_editable(textedit, false);
+    textedit_enable(textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
         "[123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.]\n"

@@ -73,18 +73,14 @@ struct {
             strbuf_t options;
         };
     } context_menu;
-
-    Textedit textedit;
 } GUI;
 
 void GUI_init_global_context(void) {
     STRBUF_STATIC_INIT2(GUI_OPTIONS_STRING_LEN, GUI.context_menu._options);
 
-    // TODO: what about multiscreen setups?
-    GUI.aux_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    GUI.final_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-
-    textedit_init(&GUI.textedit);
+    // TODO: Resize the texture whenever the window resizes too.
+    GUI.aux_texture = LoadRenderTexture(GetMonitorWidth(0), GetMonitorHeight(0));
+    GUI.final_texture = LoadRenderTexture(GetMonitorWidth(0), GetMonitorHeight(0));
 
     //LoadFont
     GUI.font_spacing = 1;
@@ -127,7 +123,7 @@ void GUI_init_global_context(void) {
 }
 
 void GUI_cleanup(void) {
-    textedit_free(&GUI.textedit);
+    // Nothing to free.
 }
 
 void GUI_open_context_menu(strview_t options_str) {
@@ -419,27 +415,10 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
         ClearBackground(BLANK);
     EndTextureMode();
 
-    /*
-    // @Note: This "popup" system eventually has to be refactored away.
-    // Include popup if opened.
-    Widget widget_popup = WIDGET_INVALID;
-    bool popup_is_open = GUI.curr_popup != POPUP_NONE;
-    if (popup_is_open) {
-        widget_popup = GUI_register_widget(
-            ctx,
-            (Rect2) {{
-                GUI.context_menu.origin.x, GUI.context_menu.origin.y,
-                (float)GetScreenWidth(), (float)GetScreenHeight()
-            }}
-        );
-    }
-    */
-
-    /*if (popup_is_open && ctx->widget_focused_id != widget_popup.id) {
-        GUI_close_popup(-1);
-    }*/
+    Rect2 area_copy = { 0 };
 
     GUI__calculate_focus(ctx);
+    printfd("Current focus is for widget %d", ctx->widget_focused_id);
 
     for (int i = 0; i < ctx->widget_stack.size; ++i) {
         Widget *widget = &ctx->widget_stack.items[i];
@@ -510,6 +489,17 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
             }
             case WIDGET_TEXTEDIT:
             {
+                BeginTextureMode(GUI.aux_texture);
+                textedit_draw(&ctx->textedit, widget_draw.area, GUI.font, GUI.font_size,
+                    GUI.font_spacing, GUI.font_width);
+                EndTextureMode();
+
+                BeginTextureMode(GUI.final_texture);
+                DrawTextureRec_flipped(GUI.aux_texture.texture,
+                        widget->area.rect, widget->area.pos, WHITE);
+                EndTextureMode();
+
+                area_copy = widget_draw.area;
                 break;
             }
             case WIDGET_MAX: break;
@@ -526,8 +516,11 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
         DrawTexture_flipped(GUI.final_texture.texture, 0, 0, WHITE);
         DrawFPS(0,0);
 
-        textedit_draw(&GUI.textedit, (Rect2) {{ 650, 500, 187, 150 }}, GUI.font, GUI.font_size,
-                GUI.font_spacing, GUI.font_width);
+        if ((1)) {
+            textedit_debug_draw(
+                &ctx->textedit, (Vector2){area_copy.x +area_copy.width, area_copy.y},
+                GUI.font, GUI.font_size, GUI.font_spacing);
+        }
 
         //if (popup_is_open) {
             //GUI_draw_popups(ctx, widget_popup);
