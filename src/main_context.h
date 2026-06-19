@@ -73,7 +73,7 @@ void ctx_init(Ctx *ctx) {
     });
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
         .type = WIDGET_TEXTEDIT,
-        .area = (Rect2) {{ 650, 200, 187, 150 }},
+        .area = (Rect2) {{ 650, 500, 187, 150 }},
     });
     // MOVEME
 }

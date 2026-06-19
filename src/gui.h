@@ -526,7 +526,7 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
         DrawTexture_flipped(GUI.final_texture.texture, 0, 0, WHITE);
         DrawFPS(0,0);
 
-        textedit_draw(&GUI.textedit, (Rect2) {{ 650, 200, 187, 150 }}, GUI.font, GUI.font_size,
+        textedit_draw(&GUI.textedit, (Rect2) {{ 650, 500, 187, 150 }}, GUI.font, GUI.font_size,
                 GUI.font_spacing, GUI.font_width);
 
         //if (popup_is_open) {
