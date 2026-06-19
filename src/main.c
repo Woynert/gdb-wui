@@ -135,7 +135,7 @@ int main (void) {
     GUI_init_global_context();
 
     textedit_toggle_line_numbers(&GUI.textedit, true);
-    textedit_set_editable(&GUI.textedit, true);
+    textedit_set_editable(&GUI.textedit, false);
     textedit_enable(&GUI.textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
