@@ -243,7 +243,7 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget *widget) {
     Rect2 view_rect = widget->area;
 
     BeginTextureMode(GUI.aux_texture);
-    DrawRectangleRec(view_rect.rect, GRAY);
+    ClearBackground(GRAY);
 
     const float LINE_HEIGHT = GUI.font_size;
     const float PAD = 5;
@@ -335,9 +335,7 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget *widget) {
         selectable_area.y = text_pos.y;
     }
 
-    Widget_report_max_height(widget, (int)(selectable_area.y + selectable_area.height));
-
-    DrawRectangleLinesEx(view_rect.rect, 1, BLACK);
+    Widget_report_max_height(widget, (int)(selectable_area.y + selectable_area.height - view_rect.y));
     EndTextureMode();
 }
 
@@ -449,16 +447,20 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
         Widget widget_draw = *widget;
 
         if (widget->is_scrollable) {
-            const int SCROLL_PX = 20;
 
-            // Read scroll.
+            // Scroll.
+
+            const int SCROLL_PX = 40;
             int scroll = (int)BetterMouse_mouse_wheel();
             if (scroll != 0) {
-                widget->scroll_px += scroll * SCROLL_PX;
+                widget->scroll_px -= scroll * SCROLL_PX;
             }
+            int max_scroll = int_max(widget->max_height_px, (int)widget->area.height) - (int)widget->area.height;
 
-            // Apply scroll.
-            widget_draw.area.y += (float)widget->scroll_px;
+            widget->scroll_px = int_clamp(0, max_scroll, widget->scroll_px);
+
+            /* Apply scroll. */
+            widget_draw.area.y -= (float)widget->scroll_px;
         }
 
         static_assert(WIDGET_MAX == 4, "Enum changed.");
@@ -487,6 +489,11 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
                 break;
             }
             case WIDGET_MAX: break;
+        }
+
+        /* Save reported max height. */
+        if (widget_draw.is_scrollable) {
+            widget->max_height_px = widget_draw.max_height_px;
         }
     }
 
