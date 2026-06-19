@@ -1125,7 +1125,7 @@ void textedit_draw(
 
 
             int mouse_x_char = utf8_visually_nearest(
-                &textedit->buffer->cstr[line.start], line.end - line.start, mouse_x_char_target);
+                &textedit->buffer->cstr[line.start], line.end - line.start -1, mouse_x_char_target);
 
             textedit->cursor = int_clamp(0, line.end, line.start + mouse_x_char);
             textedit__reset_cursor_blink(textedit);
