@@ -136,6 +136,13 @@ int main (void) {
     hook_glfw_callbacks(&ctx);
     GUI_init_global_context();
 
+    textedit_set_draw_opts(textedit, (Textedit_Drawopts) {
+        .font_width = GUI.font_width,
+        .font_spacing = GUI.font_spacing,
+        .font_size = GUI.font_size,
+        .line_spacing = 2,
+    });
+    textedit_highlight_line(textedit, true, 7);
     textedit_toggle_line_numbers(textedit, true);
     textedit_set_editable(textedit, false);
     textedit_enable(textedit, cstr(

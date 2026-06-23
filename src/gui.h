@@ -490,8 +490,7 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
             case WIDGET_TEXTEDIT:
             {
                 BeginTextureMode(GUI.aux_texture);
-                textedit_draw(&ctx->textedit, widget_draw.area, GUI.font, GUI.font_size,
-                    GUI.font_spacing, GUI.font_width);
+                textedit_draw(&ctx->textedit, widget_draw.area, GUI.font);
                 EndTextureMode();
 
                 BeginTextureMode(GUI.final_texture);
@@ -518,8 +517,7 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
 
         if ((1)) {
             textedit_debug_draw(
-                &ctx->textedit, (Vector2){area_copy.x +area_copy.width, area_copy.y},
-                GUI.font, GUI.font_size, GUI.font_spacing);
+                &ctx->textedit, (Vector2){area_copy.x +area_copy.width, area_copy.y}, GUI.font);
         }
 
         //if (popup_is_open) {
