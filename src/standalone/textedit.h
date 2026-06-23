@@ -71,7 +71,7 @@ typedef struct Textedit_Drawopts {
 typedef struct Textedit {
     /* Properties */
 
-    bool enabled;
+    //bool enabled;
     bool editable;
     bool show_line_numbers;
     int visible_rows;
@@ -142,8 +142,9 @@ typedef struct Textedit_VisibleLines {
 
 void textedit_init(Textedit *textedit);
 void textedit_free(Textedit *textedit);
-void textedit_enable(Textedit *textedit, strview_t initial_buffer);
-void textedit_disable(Textedit *textedit);
+void textedit_set_buffer(Textedit *textedit, strview_t initial_buffer);
+//void textedit_enable(Textedit *textedit, strview_t initial_buffer);
+//void textedit_disable(Textedit *textedit);
 void textedit_set_editable(Textedit *textedit, bool value);
 void textedit_toggle_line_numbers(Textedit *textedit, bool value);
 void textedit_highlight_line(Textedit *textedit, bool enable, int line);
@@ -232,8 +233,8 @@ void textedit__update_linebreaks(Textedit *textedit, int startindex) {
     textedit->line_amount = (int)textedit->linebreaks.size -2;
 }
 
-void textedit_enable(Textedit *textedit, strview_t initial_buffer) {
-    textedit->enabled = true;
+void textedit_set_buffer(Textedit *textedit, strview_t initial_buffer) {
+    //textedit->enabled = true;
     textedit->cursor = 0;
     textedit->scroll = 0;
     textedit->must_rebuild_visual_blocks = true;
@@ -241,9 +242,9 @@ void textedit_enable(Textedit *textedit, strview_t initial_buffer) {
     textedit__update_linebreaks(textedit, 0);
 }
 
-void textedit_disable(Textedit *textedit) {
-    textedit->enabled = false;
-}
+//void textedit_disable(Textedit *textedit) {
+    //textedit->enabled = false;
+//}
 
 void textedit_toggle_line_numbers(Textedit *textedit, bool value) {
     textedit->show_line_numbers = value;

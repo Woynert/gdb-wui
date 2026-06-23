@@ -77,7 +77,7 @@ void ctx_init(Ctx *ctx) {
     });
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
         .type = WIDGET_TEXTEDIT,
-        .area = (Rect2) {{ 650, 500, 187, 150 }},
+        .area = (Rect2) {{ 580, 20, 500, 500 }},
     });
     // MOVEME
 }
@@ -92,17 +92,6 @@ void ctx_free(Ctx *ctx) {
 
     *ctx = (Ctx) { 0 };
 }
-
-/*
-struct Widget {
-};
-
-   {
-    (Widget) { id, area },
-    (Widget) { id, area },
-    (Widget) { id, area },
-   }
-   */
 
 
 #endif // !MAIN_CONTEXT_H

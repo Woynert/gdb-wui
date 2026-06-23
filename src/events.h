@@ -5,6 +5,7 @@
 #include "portable_utils.h"
 #include "stdbool.h"
 #include "ipc.h"
+#include "stdio.h"
 #include "main_context.h"
 #include <assert.h>
 
@@ -108,6 +109,67 @@ void WuiState_process_events(Ctx *ctx) {
     }
 
     Event_da_clear_preserve(&w->events);
+}
+
+
+// TODO: Think of a better name.
+int update_file_view_from_file_line_query(Ctx *ctx) {
+    WuiState *w = &ctx->wui_state;
+
+    // 1. Check we have valid location.
+    if (!w->has_valid_location) {
+        printfd("ERR: No valid location.");
+        return -1;
+    }
+
+    // 2. Check file exists in disk.
+    FILE *file = fopen(w->curr_file_path->cstr, "rb");
+    if (file == NULL) {
+        printfd("ERR:");
+        perror("fopen");
+        return -1;
+    }
+
+    // 3. Read file size.
+    if (fseek(file, 0, SEEK_END) != 0) {
+        printfd("ERR:");
+        perror("fseek");
+        goto out;
+    }
+    int size = (int)ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // 3. Read whole file into buffer.
+    strbuf_t **buf = &w->file_contents_tmp_buf;
+    strbuf_empty(buf);
+    strbuf_grow(buf, size);
+    int bytes_read = (int)fread(&(*buf)->cstr, sizeof(char), (size_t)size, file);
+    if (bytes_read <= 0) {
+        printfd("ERR: Couldn't read.");
+        if (bytes_read < 0) { perror("fread"); }
+        goto out;
+    }
+    (*buf)->size = bytes_read;
+
+    if ((0)) {
+        printfd("Got it! It reads (bytes %d) [%"PRIstr"]",
+            (*buf)->size, PRIstrarg(strbuf_view(buf)));
+    }
+
+    // 4. Update textedit buffer.
+    textedit_set_buffer(&ctx->textedit, strbuf_view(buf));
+
+    // 5. Reveal current line.
+    textedit_reveal_line(&ctx->textedit, w->curr_line);
+    textedit_highlight_line(&ctx->textedit, true, w->curr_line);
+
+    return 0;
+
+    out:
+    {
+        fclose(file);
+        return -1;
+    }
 }
 
 

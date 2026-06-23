@@ -418,7 +418,6 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
     Rect2 area_copy = { 0 };
 
     GUI__calculate_focus(ctx);
-    printfd("Current focus is for widget %d", ctx->widget_focused_id);
 
     for (int i = 0; i < ctx->widget_stack.size; ++i) {
         Widget *widget = &ctx->widget_stack.items[i];

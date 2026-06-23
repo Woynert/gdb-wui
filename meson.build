@@ -80,12 +80,15 @@ raygui_dep = raygui_proj.get_variable('raygui_dep')
 
 gl_dep = dependency('gl') # Only needed to shut up clang LSP.
 
-# artifacts
+# Artifacts
+
+core_includes = include_directories('./src', './src/standalone')
 
 gdbwui_exe = executable(
   'gdbwui'
   ,'src/main.c'
-  ,'src/gdb_woy_api_imp.c'
+  ,'src/standalone/gdb_woy_api_imp.c'
+  ,include_directories : core_includes
   ,dependencies : [
     raylib_dep,
     math_dep,
@@ -108,7 +111,8 @@ gdbwui_exe = executable(
 
 file_list_exe = executable(
   'file_list'
-  ,'src/file_list.c'
+  ,'src/demos/file_list.c'
+  ,include_directories : core_includes
   ,dependencies : [
     raylib_dep,
     math_dep,
@@ -121,7 +125,8 @@ file_list_exe = executable(
 
 tree_exe = executable(
   'tree'
-  ,'src/tree.c'
+  ,'src/demos/tree.c'
+  ,include_directories : core_includes
   ,dependencies : [
     math_dep,
     mickstr_dep

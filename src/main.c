@@ -6,7 +6,7 @@
 
 #include "raylib.h"
 #include "raygui.h"
-#include "src/events.h"
+#include "events.h"
 #include "strbuf.h"
 #include "strview.h"
 #include "portable_utils.h"
@@ -145,7 +145,7 @@ int main (void) {
     textedit_highlight_line(textedit, true, 7);
     textedit_toggle_line_numbers(textedit, true);
     textedit_set_editable(textedit, false);
-    textedit_enable(textedit, cstr(
+    textedit_set_buffer(textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
         "[123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.123.]\n"
@@ -217,6 +217,9 @@ int main (void) {
 
         if (IsKeyPressed(KEY_H)) {
             textedit_reveal_line(textedit, 15);
+        }
+        if (IsKeyPressed(KEY_J)) {
+            update_file_view_from_file_line_query(&ctx);
         }
     }
 
