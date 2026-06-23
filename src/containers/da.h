@@ -61,7 +61,7 @@ static int   pfx(insert_at_preserve_order)    (Dyna *da, int index, TYPE item);
 static int   pfx(remove_at)                   (Dyna *da, int index);
 static int   pfx(pop_at_preserve_order)       (Dyna *da, int index);
 static int   pfx(set)                         (Dyna *da, int index, TYPE item);
-static TYPE *pfx(get)                         (const Dyna *da, int index);
+static TYPE *pfx(get_safe)                     (const Dyna *da, int index);
 static bool  pfx(get_next)                    (const Dyna *da, pfx(Iterator) *it);
 #ifdef DYNA__ENABLE_COMPARISONS
 static bool  pfx(has)                         (const Dyna *da, TYPE value);
@@ -180,9 +180,10 @@ static int pfx(set) (Dyna *da, int index, TYPE item) {
 }
 
 
+/* @note Safe get which checks boundares */
 /* @note You can directly access items instead too. */
 /* @returns Pointer or NULL. */
-static TYPE *pfx(get) (const Dyna *da, int index) {
+static TYPE *pfx(get_safe) (const Dyna *da, int index) {
     if (index < 0 || index >= da->size) { return NULL; }
     return &da->items[index];
 }

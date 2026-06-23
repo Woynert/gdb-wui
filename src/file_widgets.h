@@ -279,7 +279,7 @@ bool FileExplorer_render(
             from_line, line_count, from_line + screen_line_capacity);
 
     for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
-        File *file = File_Dyna_get(&file_explorer->files_dyna, i);
+        File *file = File_Dyna_get_safe(&file_explorer->files_dyna, i);
         if (file == NULL) continue;
 
         // mouse interaction
@@ -420,7 +420,7 @@ void FileViewer_render(FileViewer *file_viewer, Rectangle panel_rect) {
     strbuf_assign(&aux_file_str, cstr(""));
 
     for (int i = from_line, k = 0; i < to_line; ++i, ++k) {
-        strview_t *line = strview_t_Dyna_get(&file_viewer->lines, i);
+        strview_t *line = strview_t_Dyna_get_safe(&file_viewer->lines, i);
         if (line == NULL) continue;
 
         strbuf_assign(&aux_file_str, *line);

@@ -68,7 +68,6 @@ typedef struct Textedit_Drawopts {
     TEXTEDIT_PUBLIC_DRAWOPTS
 } Textedit_Drawopts;
 
-
 typedef struct Textedit {
     /* Properties */
 
@@ -111,6 +110,7 @@ typedef struct Textedit {
     double cursor_blink_timestamp_secs;
 
     int visualline_start;
+    int_Dyna return_visible_lines_cache;
 
     /* Draw opts */
 
@@ -134,6 +134,12 @@ typedef struct Textedit {
 
 #undef TEXTEDIT_PUBLIC_DRAWOPTS
 
+typedef struct Textedit_VisibleLines {
+    int line_height_px;
+    int line_count;
+    const int* lines; /* Read only. */
+} Textedit_VisibleLines;
+
 void textedit_init(Textedit *textedit);
 void textedit_free(Textedit *textedit);
 void textedit_enable(Textedit *textedit, strview_t initial_buffer);
@@ -142,6 +148,7 @@ void textedit_set_editable(Textedit *textedit, bool value);
 void textedit_toggle_line_numbers(Textedit *textedit, bool value);
 void textedit_highlight_line(Textedit *textedit, bool enable, int line);
 void textedit_reveal_line(Textedit *t, int line);
+int textedit_get_visible_lines(Textedit *t, Textedit_VisibleLines *out_visible_lines);
 void textedit_draw(Textedit *textedit, Rect2 view_rect, Font font);
 void textedit_debug_draw(const Textedit *textedit, Vector2 pos, Font font);
 
@@ -181,6 +188,7 @@ void textedit_init(Textedit *textedit) {
     *textedit = (Textedit) { 0 };
     textedit->buffer = strbuf_create(0, NULL);
     textedit->linebreaks = int_Dyna_create();
+    textedit->return_visible_lines_cache = int_Dyna_create();
     textedit->visualblocks = TexteditVisualLine_Dyna_create();
 
     textedit->editlog.ring = TexteditRing_create(TEXTEDIT_LOG_SIZE);
@@ -192,6 +200,7 @@ void textedit_init(Textedit *textedit) {
 void textedit_free(Textedit *textedit) {
     strbuf_destroy(&textedit->buffer);
     int_Dyna_free(&textedit->linebreaks);
+    int_Dyna_free(&textedit->return_visible_lines_cache);
     TexteditVisualLine_Dyna_free(&textedit->visualblocks);
 
     for (int i = 0; i < TEXTEDIT_LOG_SIZE; ++i) {
@@ -291,6 +300,30 @@ void textedit_reveal_line(Textedit *t, int line) {
 }
 
 
+/// @return Error.
+int textedit_get_visible_lines(Textedit *t, Textedit_VisibleLines *out_visible_lines) {
+
+    int_Dyna_clear_preserve(&t->return_visible_lines_cache);
+
+    int viline_i = t->visualline_start;
+    TexteditVisualLine *viline;
+    for (int i = 0; i < t->visible_rows; ++i, ++viline_i) {
+        viline = TexteditVisualLine_Dyna_get_safe(&t->visualblocks, viline_i);
+        if (viline == NULL) {
+            goto early_return;
+        }
+        int_Dyna_append(&t->return_visible_lines_cache, viline->line);
+    }
+
+    early_return:
+
+    *out_visible_lines = (Textedit_VisibleLines) {
+        .line_height_px = (int)(t->font_size + t->line_spacing),
+        .line_count = t->return_visible_lines_cache.size,
+        .lines = t->return_visible_lines_cache.items
+    };
+    return 0;
+}
 
 
 void textedit__scroll_down(Textedit *textedit) {
@@ -1106,7 +1139,7 @@ void textedit_draw(Textedit *t, Rect2 view_rect, Font font) {
     float textLineSpacing = t->line_spacing;
     TexteditVisualLine visual_line = { 0 };
 
-    t->visible_rows = (int)floorf(view_rect.height / t->line_height);
+    t->visible_rows = (int)ceilf(view_rect.height / t->line_height);
 
     if (t->must_rebuild_visual_blocks) {
         t->must_rebuild_visual_blocks = false;

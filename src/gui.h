@@ -496,6 +496,43 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
                 BeginTextureMode(GUI.final_texture);
                 DrawTextureRec_flipped(GUI.aux_texture.texture,
                         widget->area.rect, widget->area.pos, WHITE);
+
+                /// MOVEME: Drawing on top of textedit
+
+                {
+                    Textedit_VisibleLines visible_lines;
+
+                    const float INFO_WIDTH = 30;
+                    Rect2 info_rect = widget_draw.area;
+                    info_rect.x -= INFO_WIDTH;
+                    info_rect.width = INFO_WIDTH;
+                    DrawRectangleRec(info_rect.rect, GRAY);
+                    DrawRectangleLinesEx(info_rect.rect, 1, BLACK);
+
+                    int err = textedit_get_visible_lines(&ctx->textedit, &visible_lines);
+                    if (err == 0) {
+                        int prev_line = -1;
+                        for (int k = 0; k < visible_lines.line_count; ++k)
+                        {
+                            if (prev_line == visible_lines.lines[k]) { continue; }
+                            prev_line = visible_lines.lines[k];
+
+                            DrawTextEx_strview(
+                                GUI.font,
+                                strbuf_printf(&gui_str, "%d", visible_lines.lines[k]),
+                                (Vector2) {
+                                    info_rect.x,
+                                    info_rect.y + (float)(visible_lines.line_height_px * k)
+                                },
+                                GUI.font_size,
+                                GUI.font_spacing, 0, RED
+                            );
+                        }
+                    }
+                }
+
+                /// MOVEME!: Drawing on top of textedit
+
                 EndTextureMode();
 
                 area_copy = widget_draw.area;
@@ -519,6 +556,7 @@ void GUI_draw_all(Ctx *ctx, WuiState *state) {
             textedit_debug_draw(
                 &ctx->textedit, (Vector2){area_copy.x +area_copy.width, area_copy.y}, GUI.font);
         }
+
 
         //if (popup_is_open) {
             //GUI_draw_popups(ctx, widget_popup);
