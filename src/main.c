@@ -214,6 +214,10 @@ int main (void) {
         WuiState_process_events(&ctx);
         BetterMouse_consume_all();
         EndDrawing();
+
+        if (IsKeyPressed(KEY_H)) {
+            textedit_reveal_line(textedit, 15);
+        }
     }
 
     // Cleanup

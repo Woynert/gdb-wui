@@ -141,6 +141,7 @@ void textedit_disable(Textedit *textedit);
 void textedit_set_editable(Textedit *textedit, bool value);
 void textedit_toggle_line_numbers(Textedit *textedit, bool value);
 void textedit_highlight_line(Textedit *textedit, bool enable, int line);
+void textedit_reveal_line(Textedit *t, int line);
 void textedit_draw(Textedit *textedit, Rect2 view_rect, Font font);
 void textedit_debug_draw(const Textedit *textedit, Vector2 pos, Font font);
 
@@ -163,6 +164,7 @@ void textedit__scroll_up(Textedit *textedit);
 void textedit__cursor_down(Textedit *textedit);
 void textedit__cursor_up(Textedit *textedit);
 void textedit__move_by_world(Textedit *textedit, int dir);
+void textedit__center_cursor(Textedit *t);
 
 /* Functions for editing text. */
 void textedit__insert(Textedit *textedit, int start, strview_t str);
@@ -252,10 +254,43 @@ bool textedit__is_unicode_in_range(int unicode) {
 }
 
 
-void textedit_highlight_line(Textedit *textedit, bool enable, int line) {
-    textedit->highlight_line_enabled = enable;
-    textedit->highlight_line = line;
+void textedit_highlight_line(Textedit *t, bool enable, int line) {
+    t->highlight_line_enabled = enable;
+    t->highlight_line = line;
 }
+
+
+void textedit__center_cursor(Textedit *t) {
+    if (!t->cursor_has_visual_line) { return; }
+    // TODO CENTER CURSOR
+
+    int center = t->visualline_start + t->visible_rows/2;
+    int dist_from_visual_center = t->cursor_visual_line - center;
+    printfd("distance from top %d", dist_from_visual_center);
+
+    for (int i = 0; i < abs(dist_from_visual_center); ++i) {
+        if (dist_from_visual_center > 0) {
+            textedit__scroll_down(t);
+        } else {
+            textedit__scroll_up(t);
+        }
+    }
+
+}
+
+
+void textedit_reveal_line(Textedit *t, int line) {
+    if (line < 0 || line >= t->linebreaks.size) { return; }
+
+    int breakline_pos = t->linebreaks.items[line];
+    t->cursor = int_min(t->buffer->size-1, breakline_pos +1);
+
+    textedit__force_focus_cursor(t);
+    textedit__find_visualline_corresponding_to_scroll(t);
+    textedit__center_cursor(t);
+}
+
+
 
 
 void textedit__scroll_down(Textedit *textedit) {
@@ -593,14 +628,17 @@ void textedit__find_cursor_visual_line(Textedit *textedit) {
 
 
 /* NOTE: Maybe merge with above function? */
-void textedit__find_visualline_corresponding_to_scroll(Textedit *textedit) {
-    textedit->viline_corresponding_to_scroll = -1;
-    for (int i = 0; i < (int)textedit->visualblocks.size; ++i) {
-        if (textedit->visualblocks.items[i].line == textedit->scroll) {
-            textedit->viline_corresponding_to_scroll = i;
+void textedit__find_visualline_corresponding_to_scroll(Textedit *t) {
+    t->viline_corresponding_to_scroll = -1;
+    for (int i = 0; i < (int)t->visualblocks.size; ++i) {
+        if (t->visualblocks.items[i].line == t->scroll) {
+            t->viline_corresponding_to_scroll = i;
             break;
         }
     }
+
+    t->visualline_start = t->viline_corresponding_to_scroll + t->wrap_scroll;
+    t->visualline_start = int_clamp(0, (int)t->visualblocks.size -1, t->visualline_start);
 }
 
 void textedit__reset_cursor_blink(Textedit *textedit) {
@@ -1083,12 +1121,10 @@ void textedit_draw(Textedit *t, Rect2 view_rect, Font font) {
 
     textedit__find_cursor_visual_line(t);
     textedit__find_visualline_corresponding_to_scroll(t);
-    t->visualline_start = t->viline_corresponding_to_scroll
-                     + t->wrap_scroll;
+
     int visualline_end = int_min(
         t->visualline_start + t->visible_rows, (int)t->visualblocks.size -1
     );
-    t->visualline_start = int_clamp(0, (int)t->visualblocks.size -1, t->visualline_start);
     visualline_end   = int_clamp(0, (int)t->visualblocks.size -1, visualline_end);
 
 
