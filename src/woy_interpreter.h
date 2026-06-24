@@ -9,8 +9,14 @@
 #include "sys/types.h"
 #include "wui_state.h"
 #include "portable_utils.h"
+#include "events.h"
 
 #define WOY_INTERPRETER_BUFFER_SIZE 4096
+
+#define WOY_INTERPRETER_MAGIC_SYMBOL "[SYM]"
+#define WOY_INTERPRETER_MAGIC_PARENT "[PAR]"
+#define WOY_INTERPRETER_MAGIC_PARENT_END "[END]"
+#define WOY_INTERPRETER_MAGIC_CHILDREN_INFO "[CHI]"
 
 
 typedef struct WoyInterp {
@@ -19,6 +25,24 @@ typedef struct WoyInterp {
         strbuf_t buffer;
     };
 } WoyInterp;
+
+
+void WoyInterp_init(WoyInterp *woy_interp);
+void WoyInterp_reset(WoyInterp *woy_interp);
+void WoyInterp_push_line(WoyInterp *woy_interp, strview_t line);
+void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state);
+int WoyInterp_interpret_symbols(WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id);
+int WoyInterp_interpret_file_line(WoyInterp *woy_interp, WuiState *wui_state);
+
+
+#endif // !WOY_INTERPRETER_H
+#include "have_lsp.h"
+#if (defined WOY_INTERPRETER_H_IMPLEMENTATION || defined HAVE_LSP) && !defined WOY_INTERPRETER_H_DONE
+#define WOY_INTERPRETER_H_DONE
+/*
+ * █ █▀▄▀█ █▀█ █   █▀▀ █▀▄▀█ █▀▀ █▄ █ ▀█▀ ▄▀█ ▀█▀ █ █▀█ █▄ █
+ * █ █ ▀ █ █▀▀ █▄▄ ██▄ █ ▀ █ ██▄ █ ▀█  █  █▀█  █  █ █▄█ █ ▀█
+ */
 
 
 void WoyInterp_init(WoyInterp *woy_interp) {
@@ -87,6 +111,8 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
 }
 
 
+
+
 /*
   @brief Builds the symbol tree
   @param symbol_id. If 0 will overwrite the entire tree. (Used for locals)
@@ -94,7 +120,7 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
   @returns error.
 */
 int WoyInterp_interpret_symbols(
-   WoyInterp *woy_interp, WuiState *wui_state, uint symbol_id
+   WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id
 ) {
    strbuf_t *tmp = &woy_interp->buffer;
    strview_t src = strbuf_view(&tmp);
@@ -102,24 +128,48 @@ int WoyInterp_interpret_symbols(
 
    line = strview_split_line(&src, NULL);
    uint success = strnum_u32(line, 0, STRNUM_DEFAULT);
-   if (!success) { return -1; }
+   if (success == 0) { return -1; }
 
-   if (symbol_id != 0) {
-      int err = SymbolTree_destroy_children(&wui_state->locals, symbol_id);
+   if (symbol_id == 0) {
+      SymbolTree_clear(symbol_tree);
+   }
+   else {
+      int err = SymbolTree_destroy_children(symbol_tree, symbol_id);
       if (err != 0) {
          return -3;
       }
    }
 
-   if (symbol_id == 0) {
-      SymbolTree_clear(&wui_state->locals);
-   }
+   bool use_references     = false;
+   bool next_one_is_parent = false;
+   bool have_parent        = false;
+   uint parent_symbol_id;
 
-   while (true) {
+   for (;;) {
+      printfd("-");
       line = strview_split_line(&src, NULL);
-      if (strview_compare(line, cstr("vvv")) != 0) {
+
+      if (strview_compare(line, cstr(WOY_INTERPRETER_MAGIC_CHILDREN_INFO)) == 0) {
+         use_references = true;
+         continue;
+      }
+      if (strview_compare(line, cstr(WOY_INTERPRETER_MAGIC_PARENT)) == 0) {
+         next_one_is_parent = true;
+         have_parent = false;
+         printfd("%"PRIstr, PRIstrarg(line));
+         continue;
+      } else if (strview_compare(line, cstr(WOY_INTERPRETER_MAGIC_PARENT_END)) == 0) {
+         next_one_is_parent = false;
+         have_parent = false;
+         printfd("%"PRIstr, PRIstrarg(line));
+         continue;
+      } else if (strview_compare(line, cstr(WOY_INTERPRETER_MAGIC_SYMBOL)) != 0) {
+         printfd("%"PRIstr, PRIstrarg(line));
          break;
       }
+
+
+      // Read symbol
 
       WuiSymbol symbol;
       WuiSymbol_init(&symbol);
@@ -142,26 +192,65 @@ int WoyInterp_interpret_symbols(
       tmp = &symbol.address;
       strbuf_assign(&tmp, line);
 
-      int err = SymbolTree_create_node(&wui_state->locals, symbol_id, NULL, symbol);
+
+      if (use_references && next_one_is_parent) {
+
+         // Find the correct parent to add it to.
+
+         SymbolTree_Iterator out_it_read_only = { 0 };
+         int err = SymbolTree_find_node_by_full_path(
+                     symbol_tree, strbuf_view2(&symbol.symbol_name), &out_it_read_only);
+         if (err == 0) {
+            have_parent = true;
+            next_one_is_parent = false;
+            parent_symbol_id = out_it_read_only.node_id;
+            out_it_read_only.item->is_expanded = true;
+            continue;
+         }
+      }
+
+      /* @note: This could be removed if we remove the case where the [PAR] tag appends
+         to the parent instead of a reference. */
+      if (next_one_is_parent) { symbol.is_expanded = true; } 
+
+      uint add_to_symbol_id = have_parent ? parent_symbol_id : symbol_id;
+
+      uint out_node_id;
+      int err = SymbolTree_create_node(symbol_tree, add_to_symbol_id, &out_node_id, symbol);
+
       if (err != 0) {
          printfd("ERROR: Couldn't insert node.");
+         next_one_is_parent = false;
+         continue;
       }
+
+      if (next_one_is_parent) {
+         next_one_is_parent = false;
+         have_parent = true;
+         parent_symbol_id = out_node_id;
+      }
+
 
       //printf("Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
             //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
             //symbol.value.cstr, symbol.address.cstr);
    }
+
    //printf("PRINTING SYMBOLS BELOW VVV\n");
    // print tree contents
-   //for (uint i = 0; i < wui_state->symbol_tree.nodes.size; ++i) {
-      //WuiSymbol symbol = wui_state->symbol_tree.nodes.items[i].item;
-      //for (uint k = 0; k < 4 * wui_state->symbol_tree.nodes.items[i].depth;
-      //     ++k) { printf(" "); }
-      //printf("(TREE_ID %d parent %d) Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
-            //wui_state->symbol_tree.nodes.items[i].id,
-            //wui_state->symbol_tree.nodes.items[i].parent_id,
+   //if ((0)) {
+      //for (int i = 0; i < symbol_tree->nodes.size; ++i) {
+         //WuiSymbol symbol = symbol_tree->nodes.items[i].item;
+         //for (int k = 0; k < 4 * symbol_tree->nodes.items[i].depth; ++k) { printf(" "); }
+
+         //printf(
+            //"(TREE_ID %d parent %d) Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
+            //symbol_tree->nodes.items[i].id,
+            //symbol_tree->nodes.items[i].parent_id,
             //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
-            //symbol.value.cstr, symbol.address.cstr);
+            //symbol.value.cstr, symbol.address.cstr
+         //);
+      //}
    //}
 
    return 0;
@@ -196,4 +285,4 @@ int WoyInterp_interpret_file_line(WoyInterp *woy_interp, WuiState *wui_state) {
    return 0;
 }
 
-#endif // !WOY_INTERPRETER_H
+#endif // !WOY_INTERPRETER_H_IMPLEMENTATION

@@ -53,6 +53,12 @@ typedef struct Ctx {
     };
 
     Textedit textedit;
+
+    int refresh_fileline_ticks_left; /* Debouncing: Updates when user command finishes. */
+
+    strbuf_t *aux_str1;
+    strbuf_t *aux_str2;
+    strbuf_t *aux_str3;
 } Ctx;
 
 
@@ -62,6 +68,9 @@ void ctx_init(Ctx *ctx) {
     IPCReader_init(&ctx->reader);
     CliPrompt_init(&ctx->cli_prompt);
     textedit_init(&ctx->textedit);
+    ctx->aux_str1 = strbuf_create_empty(0, NULL);
+    ctx->aux_str2 = strbuf_create_empty(0, NULL);
+    ctx->aux_str3 = strbuf_create_empty(0, NULL);
 
     // MOVEME
     ctx->widget_stack = Widget_Dyna_create();
@@ -72,7 +81,7 @@ void ctx_init(Ctx *ctx) {
     });
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
         .type = WIDGET_BREAKPOINTS,
-        .area = (Rect2) {{ 20, 450, 200, 120 }},
+        .area = (Rect2) {{ 20, 550, 200, 120 }},
         .is_scrollable = true,
     });
     Widget_Dyna_append(&ctx->widget_stack, (Widget) {
@@ -87,6 +96,9 @@ void ctx_free(Ctx *ctx) {
     IPCReader_free(&ctx->reader);
     //CliPrompt_free(&ctx->cli_prompt);
     textedit_free(&ctx->textedit);
+    strbuf_destroy(&ctx->aux_str1);
+    strbuf_destroy(&ctx->aux_str2);
+    strbuf_destroy(&ctx->aux_str3);
 
     Widget_Dyna_free(&ctx->widget_stack);
 

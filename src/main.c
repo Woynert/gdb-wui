@@ -22,6 +22,10 @@
 /* IMPLEMENTATIONS */
 #define IPC_H_IMPLEMENTATION
 #include "ipc.h"
+#define EVENTS_H_IMPLEMENTATION
+#include "events.h"
+#define WOY_INTERPRETER_H_IMPLEMENTATION
+#include "woy_interpreter.h"
 
 
 void glfw_mouse_callback(GLFWwindow* w, int button, int action, int mods) {
@@ -108,22 +112,18 @@ int main (void) {
     IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
 
 
-    error = IPC_write_cmd(ipc_ctx, cstr("py woy_locals()\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, wui_state, 0);
-    // After calling a 'WOY API' command, clear the GDB previous command
-    error = IPC_write_cmd(ipc_ctx, cstr("echo\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    /*error = IPC_write_cmd(ipc_ctx, cstr("py woy_locals()\n"));*/
+    /*ASSERT(error == 0);*/
+    /*IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, wui_state, 0);*/
+    /*// After calling a 'WOY API' command, clear the GDB previous command*/
+    /*error = IPC_write_cmd(ipc_ctx, cstr("echo\n"));*/
+    /*ASSERT(error == 0);*/
+    /*IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);*/
 
-    error = IPC_write_cmd(ipc_ctx, cstr("py woy_get_file_and_line()\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_READ_WOY_FILE_LINE, wui_state, 0);
-    // After calling a 'WOY API' command, clear the GDB previous command
-    error = IPC_write_cmd(ipc_ctx, cstr("echo\n"));
-    ASSERT(error == 0);
-    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    wait_request_get_locals(&ctx);
 
+
+    wait_request_get_file_and_line(&ctx);
 
     // Raylib stuff
     const int screenWidth = 600;
@@ -142,9 +142,9 @@ int main (void) {
         .font_size = GUI.font_size,
         .line_spacing = 2,
     });
+    textedit_set_editable(textedit, false);
     textedit_highlight_line(textedit, true, 7);
     textedit_toggle_line_numbers(textedit, true);
-    textedit_set_editable(textedit, false);
     textedit_set_buffer(textedit, cstr(
         /*"#include \"stdio.h\"\n"*/
         /*"#include \"stdlibbbb.h\"\n"*/
@@ -208,18 +208,26 @@ int main (void) {
             ASSERT(error == 0);
             CliPrompt_clear(cli_prompt);
             IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+            trigger_fileline_refresh(&ctx);
         }
 
         /* EndDrawing() sleeps and during this time we can catch inputs. */
         WuiState_process_events(&ctx);
         BetterMouse_consume_all();
         EndDrawing();
+        process_update_fileline(&ctx);
 
+        // @Note: For now I'll handle the key events here.
+        if (IsKeyPressed(KEY_G)) {
+            wait_request_update_locals(&ctx, &wui_state->locals);
+        }
         if (IsKeyPressed(KEY_H)) {
-            textedit_reveal_line(textedit, 15);
+            wait_request_get_locals(&ctx);
         }
         if (IsKeyPressed(KEY_J)) {
             update_file_view_from_file_line_query(&ctx);
+        }
+        if (IsKeyPressed(KEY_F9)) {
         }
     }
 

@@ -143,16 +143,16 @@ typedef struct Textedit_VisibleLines {
 void textedit_init(Textedit *textedit);
 void textedit_free(Textedit *textedit);
 void textedit_set_buffer(Textedit *textedit, strview_t initial_buffer);
-//void textedit_enable(Textedit *textedit, strview_t initial_buffer);
-//void textedit_disable(Textedit *textedit);
 void textedit_set_editable(Textedit *textedit, bool value);
 void textedit_toggle_line_numbers(Textedit *textedit, bool value);
 void textedit_highlight_line(Textedit *textedit, bool enable, int line);
 void textedit_reveal_line(Textedit *t, int line);
 int textedit_get_visible_lines(Textedit *t, Textedit_VisibleLines *out_visible_lines);
+void textedit_set_draw_opts(Textedit *t, Textedit_Drawopts opts);
 void textedit_draw(Textedit *textedit, Rect2 view_rect, Font font);
 void textedit_debug_draw(const Textedit *textedit, Vector2 pos, Font font);
 
+void textedit__update_visible_cols_rows(Textedit *t, int rows, int cols);
 void textedit__draw_highlight_real_line(const Textedit *t, Rect2 view_rect, int line);
 void textedit__draw_highlight_visual_lines(const Textedit* t, Rect2 view_rect,
         int start_cursor, int start_viline, int end_cursor, int end_viline, Color color);
@@ -210,6 +210,35 @@ void textedit_free(Textedit *textedit) {
     TexteditRing_free(&textedit->editlog.ring);
 }
 
+void textedit_set_buffer(Textedit *t, strview_t initial_buffer) {
+    // Reset and restore
+    {
+        Textedit bk = *t;
+        *t = (Textedit) { 0 };
+        #define TEXTEDIT_KEEP(x) t->x = bk.x
+        TEXTEDIT_KEEP(buffer);
+        TEXTEDIT_KEEP(linebreaks);
+        TEXTEDIT_KEEP(return_visible_lines_cache);
+        TEXTEDIT_KEEP(visualblocks);
+        TEXTEDIT_KEEP(editlog);
+
+        TEXTEDIT_KEEP(visible_rows);
+        TEXTEDIT_KEEP(visible_cols);
+        #undef TEXTEDIT_KEEP
+
+        textedit_set_editable(t, bk.editable);
+        textedit_set_draw_opts(t, bk.opts);
+        textedit_toggle_line_numbers(t, bk.show_line_numbers);
+    }
+
+
+    t->must_rebuild_visual_blocks = true;
+    strbuf_assign(&t->buffer, initial_buffer);
+    textedit__update_linebreaks(t, 0);
+}
+
+
+
 void textedit_set_draw_opts(Textedit *t, Textedit_Drawopts opts) {
     t->opts = opts;
     t->line_height = t->font_size + t->line_spacing;
@@ -233,19 +262,6 @@ void textedit__update_linebreaks(Textedit *textedit, int startindex) {
     textedit->line_amount = (int)textedit->linebreaks.size -2;
 }
 
-void textedit_set_buffer(Textedit *textedit, strview_t initial_buffer) {
-    //textedit->enabled = true;
-    textedit->cursor = 0;
-    textedit->scroll = 0;
-    textedit->must_rebuild_visual_blocks = true;
-    strbuf_assign(&textedit->buffer, initial_buffer);
-    textedit__update_linebreaks(textedit, 0);
-}
-
-//void textedit_disable(Textedit *textedit) {
-    //textedit->enabled = false;
-//}
-
 void textedit_toggle_line_numbers(Textedit *textedit, bool value) {
     textedit->show_line_numbers = value;
 }
@@ -265,13 +281,17 @@ bool textedit__is_unicode_in_range(int unicode) {
 
 
 void textedit_highlight_line(Textedit *t, bool enable, int line) {
+    --line;
     t->highlight_line_enabled = enable;
     t->highlight_line = line;
 }
 
 
 void textedit__center_cursor(Textedit *t) {
-    if (!t->cursor_has_visual_line) { return; }
+    if (!t->cursor_has_visual_line) {
+        printfd("ERR: No cursor visual line.");
+        return;
+    }
     // TODO CENTER CURSOR
 
     int center = t->visualline_start + t->visible_rows/2;
@@ -290,6 +310,7 @@ void textedit__center_cursor(Textedit *t) {
 
 
 void textedit_reveal_line(Textedit *t, int line) {
+    --line;
     if (line < 0 || line >= t->linebreaks.size) { return; }
 
     int breakline_pos = t->linebreaks.items[line];
@@ -297,6 +318,7 @@ void textedit_reveal_line(Textedit *t, int line) {
 
     textedit__force_focus_cursor(t);
     textedit__find_visualline_corresponding_to_scroll(t);
+    printfd("Gonna center the cursor. line %d", line);
     textedit__center_cursor(t);
 }
 
@@ -579,8 +601,13 @@ void textedit__copy_selection(Textedit *textedit) {
 void textedit__build_visual_lines(
     Textedit *textedit, int from_real_line, int max_line_amount
 ){
-    if (from_real_line >= (int)(textedit->linebreaks.size-1)) { return; }
+    if (from_real_line < 0 || from_real_line > textedit->linebreaks.size) {
+        printfd("ERR: Couldn't rebuild: Out of range.");
+        return;
+    }
+    if (max_line_amount <= 0) { max_line_amount = 1; }
 
+    printfd("Hi there I love you <3");
     strview_t source = strbuf_view2(textedit->buffer);
 
     int initial_scroll = int_max(0, from_real_line -1);
@@ -591,10 +618,12 @@ void textedit__build_visual_lines(
     int codepoint_count = 0;
 
     TexteditVisualLine_Dyna_clear_preserve(&textedit->visualblocks);
+    printfd("from_real_line %d source.size %d max_line_amount %d", from_real_line, source.size, max_line_amount);
 
     for (;b <= source.size && line_counter < max_line_amount;) {
 
-        int codepointByteCount = 0;
+        //printfd("- b %d source.size %d", b, source.size);
+        int codepointByteCount = 1;
         int codepoint = GetCodepointNext_woy(
                 &source.data[b], &codepointByteCount, source.size - b);
 
@@ -608,6 +637,7 @@ void textedit__build_visual_lines(
                     .wrap = wrap_counter
                 }
             );
+            //printfd("Added! A");
 
             ++b; // skip codepoint
             chunk_start = b;
@@ -617,7 +647,7 @@ void textedit__build_visual_lines(
             continue;
         }
         // Max columns reached.
-        if (codepoint_count == textedit->visible_cols) {
+        if (codepoint_count == textedit->visible_cols && textedit->visible_cols > 0) {
             TexteditVisualLine_Dyna_append(&textedit->visualblocks,
                 (TexteditVisualLine) {
                     .start = chunk_start,
@@ -626,6 +656,7 @@ void textedit__build_visual_lines(
                     .wrap = wrap_counter
                 }
             );
+            //printfd("Added! B");
 
             chunk_start = b;
             codepoint_count = 0;
@@ -634,10 +665,12 @@ void textedit__build_visual_lines(
         }
         ++codepoint_count;
         b += codepointByteCount;
+        //b += codepointByteCount <= 0 ? 1 : codepointByteCount;
     }
 }
 
 void textedit__find_cursor_visual_line(Textedit *textedit) {
+    //printfd("Meaning? textedit->visualblocks.size %d", textedit->visualblocks.size);
     textedit->cursor_has_visual_line = false;
     textedit->selection_has_visual_line = false;
     textedit->cursor_visual_line = -1;
@@ -755,25 +788,33 @@ void textedit_debug_draw(const Textedit *t, Vector2 pos, Font font) {
 
 
 void textedit__force_focus_cursor(Textedit *textedit) {
-    // Do nothing if cursor is visible.
+
+
+    int first_viline_index = int_max(0, textedit->viline_corresponding_to_scroll + textedit->wrap_scroll);
+    int last_viline_index = int_min(
+        textedit->visualblocks.size -1,
+        first_viline_index + textedit->visible_rows
+    );
+
+    /* Do nothing if cursor is visible. */
 
     textedit__find_cursor_visual_line(textedit);
-    int first_line_index = int_max(
-        0,
-        textedit->viline_corresponding_to_scroll + textedit->wrap_scroll
-    );
-    int last_line_index = int_min(
-        (int)textedit->visualblocks.size -1,
-        textedit->viline_corresponding_to_scroll + textedit->wrap_scroll
-        + textedit->visible_rows
-    );
 
-    if (textedit->cursor_visual_line >= first_line_index
-        && textedit->cursor_visual_line <= last_line_index) {
+    if (textedit->cursor_has_visual_line
+        && textedit->cursor_visual_line >= first_viline_index
+        && textedit->cursor_visual_line <= last_viline_index) {
         return;
     }
 
-    // Get cursor line + direction
+    /* Check if cursor is valid */
+
+    if (textedit->cursor < 0 || textedit->cursor > textedit->buffer->size) {
+        printfd("WAR: Cursor is invalid (%d) max should be (%d) setting to zero...",
+                textedit->cursor, textedit->buffer->size);
+        textedit->cursor = 0;
+    }
+
+    /* Get cursor line. */
 
     int cursor_line = -1;
     for (int i = 0; i < textedit->linebreaks.size; ++i) {
@@ -783,34 +824,43 @@ void textedit__force_focus_cursor(Textedit *textedit) {
     }
     ++cursor_line;
 
-    TexteditVisualLine line = textedit->visualblocks.items[first_line_index];
-    int dir = textedit->cursor > line.start ? 1 : -1;
+    /* Get cursor direction (should we scroll top or bottom to reach it). */
 
-    // Rebuild.
+    TexteditVisualLine viline_first = textedit->visualblocks.items[first_viline_index];
+    int dir = textedit->cursor > viline_first.start ? 1 : -1;
+
+    /* Rebuild vilines. */
 
     textedit->scroll = cursor_line;
     textedit->wrap_scroll = 0;
 
     textedit__build_visual_lines(
         textedit,
-        textedit->scroll - textedit->visible_rows,
+        int_max(0, textedit->scroll - textedit->visible_rows),
         textedit->visible_rows * 2
     );
+    if (textedit->cursor < 0 || textedit->cursor > textedit->buffer->size) {
+        printfd("WARR: Cursor is invalid (%d) max should be (%d) setting to zero...",
+                textedit->cursor, textedit->buffer->size);
+        textedit->cursor = 0;
+    }
+
     textedit__find_cursor_visual_line(textedit);
+    if (!textedit->cursor_has_visual_line) {
+        return;
+    }
+
     textedit__find_visualline_corresponding_to_scroll(textedit);
 
-    // Scroll until cursor is visible.
+    /* Scroll until cursor is visible. */
 
-    first_line_index = int_max(
-        0,
-        textedit->viline_corresponding_to_scroll + textedit->wrap_scroll
-    );
-    last_line_index = first_line_index + textedit->visible_rows;
+    first_viline_index = int_max(0, textedit->viline_corresponding_to_scroll + textedit->wrap_scroll);
+    last_viline_index = first_viline_index + textedit->visible_rows;
     // Warning: ^ Do not use to index, it's not capped.
 
-    int lines_to_scroll =
-        dir > 0 ? last_line_index - textedit->cursor_visual_line
-                : textedit->cursor_visual_line - first_line_index;
+    int lines_to_scroll = dir > 0 ?
+                last_viline_index - textedit->cursor_visual_line
+                : textedit->cursor_visual_line - first_viline_index;
 
     for (int i = 0; i < abs(lines_to_scroll); ++i) {
         if (dir > 0) {
@@ -1123,6 +1173,12 @@ void textedit__draw_highlight_real_line(const Textedit *t, Rect2 view_rect, int 
 }
 
 
+void textedit__update_visible_cols_rows(Textedit *t, int rows, int cols) {
+    t->visible_rows = rows;
+    t->visible_cols = cols;
+}
+
+
 void textedit_draw(Textedit *t, Rect2 view_rect, Font font) {
 
     t->number_padding = 0;
@@ -1130,8 +1186,14 @@ void textedit_draw(Textedit *t, Rect2 view_rect, Font font) {
         t->number_padding = (float)(int_digit_places(t->line_amount) +1)
         * (t->font_width + t->font_spacing);
     }
-    t->visible_cols = (int)floorf((view_rect.width - t->number_padding) /
-                    (t->font_width + t->font_spacing));
+
+    textedit__update_visible_cols_rows(
+        t,
+        // Rows.
+        (int)ceilf(view_rect.height / t->line_height),
+        // Cols.
+        (int)floorf((view_rect.width - t->number_padding) / (t->font_width + t->font_spacing))
+    );
 
     /* Some of these variables only need to be updated on cursor change. */
 
@@ -1140,13 +1202,12 @@ void textedit_draw(Textedit *t, Rect2 view_rect, Font font) {
     float textLineSpacing = t->line_spacing;
     TexteditVisualLine visual_line = { 0 };
 
-    t->visible_rows = (int)ceilf(view_rect.height / t->line_height);
 
     if (t->must_rebuild_visual_blocks) {
         t->must_rebuild_visual_blocks = false;
         textedit__build_visual_lines(
             t,
-            t->scroll - t->visible_rows,
+            int_max(0, t->scroll - t->visible_rows),
             t->visible_rows * 2 + 2
         );
     }
@@ -1231,7 +1292,7 @@ void textedit_draw(Textedit *t, Rect2 view_rect, Font font) {
 
         if (!t->show_line_numbers) continue;
 
-        strbuf_printf(&aux_str, "%d", visual_line.line);
+        strbuf_printf(&aux_str, "%d", visual_line.line +1);
 
         DrawTextEx_strview(
             font,

@@ -1,5 +1,15 @@
 import gdb.types
-from typing import Set, List
+from typing import Set, List, Final
+
+# Indicates there will be a symbol next.
+MAGIC_SYMBOL: Final[str] = "[SYM]"
+# Indicates the next symbol is a parent. And the proceding symbols are children.
+# There can NEVER be nested parents.
+MAGIC_PARENT: Final[str] = "[PAR]"
+# Indicates the proceding symbols are no longer children of parent.
+MAGIC_PARENT_END: Final[str] = "[END]"
+# Indicates all proceding symbols will be parents referencing other symbols.
+MAGIC_CHILDREN_INFO: Final[str] = "[CHI]"
 
 
 def _woy_func_exists(func_name: str) -> bool:
@@ -20,7 +30,7 @@ def _woy_print_gdb_value(value: gdb.Value, name: str):
         except Exception as e:
             pass
 
-    print("vvv")
+    print(MAGIC_SYMBOL)
     print(basic_type.code)
     print(value.type)
     print(name)
@@ -66,19 +76,20 @@ def woy_locals() -> None:
 ## @param page (TBD) (Optional) >1 Pagination for large structs/arrays
 ##                        0 Default, no pagination, returns all
 ##
-def woy_query_symbol(exp_str: str, print_self: bool = True) -> None:
+def woy_query_symbol(exp_str: str, print_self: bool = True, print_error_indicator: bool = True) -> None:
 
     try:
         value: gdb.Value = gdb.parse_and_eval(exp_str)
     except gdb.error:
-        print("0")
+        if print_error_indicator: print("0")
         return
 
     basic_type: gdb.Type = gdb.types.get_basic_type(value.type)
 
-    print("1")
+    if print_error_indicator: print("1")
 
     if print_self:
+        print(MAGIC_PARENT)
         _woy_print_gdb_value(value, exp_str)
 
     # print("vvv")
@@ -116,6 +127,23 @@ def woy_query_symbol(exp_str: str, print_self: bool = True) -> None:
         for i in range(size):
             item = value[i]
             _woy_print_gdb_value(item, f"({exp_str})[{i}]")
+
+    if print_self:
+        print(MAGIC_PARENT_END)
+
+
+def woy_query_symbol_multiple(exps: List[str], include_locals: bool = False) -> None:
+    if include_locals:
+        woy_locals()
+    else:
+        print("1")
+    print(MAGIC_CHILDREN_INFO)
+    for exp in exps:
+        woy_query_symbol(exp, print_self=True, print_error_indicator=False)
+
+    # @note: Maybe don't expose woy_locals and woy_query_symbol as this function
+    #        covers those cases.
+
 
 
 ## Other breakpoint commands:
@@ -265,6 +293,110 @@ Symbol basic types:
 Breakpoint types:
 TBD
 
+Example (updated protocol):
 
+(gdb) py woy_query_symbol_multiple(["shader", "gs"], True)
+1
+[SYM]
+3
+Vector3
+ambientColorNormalized
+{x = <optimized out>, y = <optimized out>, z = <optimized out>}
+None
+[SYM]
+9
+float
+ambientIntensity
+<optimized out>
+None
+[SYM]
+3
+Light
+light
+{enabled = <optimized out>, type = <optimized out>, position = {x = <optimized out>, y = <optimized
+None
+[SYM]
+3
+Model
+model
+{transform = {m0 = <optimized out>, m4 = <optimized out>, m8 = <optimized out>, m12 = <optimized out
+None
+[SYM]
+8
+int
+error
+<optimized out>
+None
+[SYM]
+1
+GameState *
+gs
+{players = {{...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}}, active_instance_i
+0x7fffffff07a0
+[SYM]
+3
+Shader
+shader
+{id = <optimized out>, locs = <optimized out>}
+None
+[SYM]
+1
+World *
+world
+<optimized out>
+None
+[SYM]
+3
+Color
+ambientColor
+{r = <optimized out>, g = <optimized out>, b = <optimized out>, a = <optimized out>}
+None
+[PAR]
+[SYM]
+3
+Shader
+shader
+{id = <optimized out>, locs = <optimized out>}
+None
+[SYM]
+8
+unsigned int
+id
+<optimized out>
+None
+[SYM]
+1
+int *
+locs
+<optimized out>
+None
+[END]
+[PAR]
+[SYM]
+1
+GameState *
+gs
+{players = {{...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}}, active_instance_i
+0x7fffffff07a0
+[SYM]
+2
+Player [10]
+players
+{{box = {pos = {...}, size = {...}}, velocity = {x = 0, y = 0, z = 0}, visual_pos = {x = 0, y = 0, z
+0x7fffffff07a0
+[SYM]
+2
+uint_DynArr [2]
+active_instance_ids
+{{size = 0, capacity = 2, items = 0x7c1ff6e77cf0}, {size = 0, capacity = 2, items = 0x7c1ff6e77d30}}
+0x7fffffff0b88
+[SYM]
+2
+uint_DynArr [2]
+active_entity_ids_per_type
+{{size = 0, capacity = 2, items = 0x7c1ff6e77d10}, {size = 0, capacity = 2, items = 0x7c1ff6e77d50}}
+0x7fffffff0bb8
+[END]
+(gdb) ...
 """
 

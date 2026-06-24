@@ -52,9 +52,16 @@ int IPC_write_cmd(IPCCtx *ctx, strview_t cmd);
 
 #endif // !IPC_H
 
+
+
 #include "have_lsp.h"
 #if (defined IPC_H_IMPLEMENTATION || defined HAVE_LSP) && !defined IPC_H_DONE
 #define IPC_H_DONE
+/*
+ * █ █▀▄▀█ █▀█ █   █▀▀ █▀▄▀█ █▀▀ █▄ █ ▀█▀ ▄▀█ ▀█▀ █ █▀█ █▄ █
+ * █ █ ▀ █ █▀▀ █▄▄ ██▄ █ ▀ █ ██▄ █ ▀█  █  █▀█  █  █ █▄█ █ ▀█
+ */
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +69,7 @@ int IPC_write_cmd(IPCCtx *ctx, strview_t cmd);
 
 #include "strbuf_extra.h"
 #include "woy_interpreter.h"
+#include "events.h"
 
 
 void IPCReader_init(IPCReader *reader) {
@@ -241,7 +249,8 @@ int IPC_wait_for_prompt(
             if (ipc_do == IPC_WAIT_DO_READ_WOY_BREAKPOINTS) {
                 WoyInterp_interpret_breakpoints(&woy_interp, wui_state);
             } else if (ipc_do == IPC_WAIT_DO_READ_WOY_LOCALS) {
-                return_err = WoyInterp_interpret_symbols(&woy_interp, wui_state, symbol_id);
+                return_err = WoyInterp_interpret_symbols(&woy_interp, &wui_state->locals, symbol_id);
+                //SymbolTree_update(&wui_state->locals, &wui_state->tmp_tree);
             } else if (ipc_do == IPC_WAIT_DO_READ_WOY_FILE_LINE) {
                 return_err = WoyInterp_interpret_file_line(&woy_interp, wui_state);
             }

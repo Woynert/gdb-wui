@@ -96,7 +96,9 @@ typedef struct Event {
 
 typedef struct WuiState {
     WuiBreakpoint_Dyna breakpoints;
+
     SymbolTree locals;
+    SymbolTree tmp_tree;
 
     bool has_valid_location; /* Guards current file path and line. */
     strbuf_t *curr_file_path; /* Absolute path. */
@@ -110,6 +112,7 @@ void WuiState_init (WuiState *wui_state) {
     *wui_state = (WuiState) { 0 };
     wui_state->breakpoints = WuiBreakpoint_Dyna_create();
     wui_state->locals = SymbolTree_create();
+    wui_state->tmp_tree = SymbolTree_create();
     wui_state->curr_file_path = strbuf_create(0, NULL);
     wui_state->file_contents_tmp_buf = strbuf_create(0, NULL);
     wui_state->events = Event_da_create();
@@ -118,6 +121,7 @@ void WuiState_init (WuiState *wui_state) {
 void WuiState_free (WuiState *wui_state) {
     WuiBreakpoint_Dyna_free(&wui_state->breakpoints);
     SymbolTree_free(&wui_state->locals);
+    SymbolTree_free(&wui_state->tmp_tree);
     strbuf_destroy(&wui_state->curr_file_path);
     strbuf_destroy(&wui_state->file_contents_tmp_buf);
     Event_da_free(&wui_state->events);

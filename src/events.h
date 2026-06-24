@@ -1,13 +1,37 @@
 #ifndef EVENTS_H
 #define EVENTS_H
 
-#include "wui_state.h"
+#include "main_context.h"
+
+void WuiState_queue_event_symbol_query(WuiState *w, EventSymbolQuery event);
+void get_symbol_absolute_name(WuiState *w, uint node_id, strbuf_t **buf);
+void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event);
+void WuiState_process_events(Ctx *ctx);
+int update_file_view_from_file_line_query(Ctx *ctx);
+void wait_request_get_file_and_line(Ctx *ctx);
+void wait_request_get_locals(Ctx *ctx);
+void SymbolTree_update(SymbolTree *base, SymbolTree *update);
+void trigger_fileline_refresh(Ctx *ctx);
+void process_update_fileline(Ctx *ctx);
+int SymbolTree_find_node_by_full_path(SymbolTree *tree, strview_t target_symbol, SymbolTree_Iterator *out_it);
+bool SymbolTree_node_has_children(SymbolTree *tree, SymbolTree_Iterator it);
+
+#endif // !EVENTS_H
+#include "have_lsp.h"
+#if (defined EVENTS_H_IMPLEMENTATION || defined HAVE_LSP) && !defined EVENTS_H_DONE
+#define EVENTS_H_DONE
+/*
+ * █ █▀▄▀█ █▀█ █   █▀▀ █▀▄▀█ █▀▀ █▄ █ ▀█▀ ▄▀█ ▀█▀ █ █▀█ █▄ █
+ * █ █ ▀ █ █▀▀ █▄▄ ██▄ █ ▀ █ ██▄ █ ▀█  █  █▀█  █  █ █▄█ █ ▀█
+ */
+
+
+#include <assert.h>
 #include "portable_utils.h"
 #include "stdbool.h"
-#include "ipc.h"
 #include "stdio.h"
-#include "main_context.h"
-#include <assert.h>
+#include "ipc.h"
+
 
 void WuiState_queue_event_symbol_query(WuiState *w, EventSymbolQuery event) {
     Event_da_append(&w->events, (Event){ .type = EVENT_SYMBOL_QUERY, .event_symbol_query = event });
@@ -173,4 +197,207 @@ int update_file_view_from_file_line_query(Ctx *ctx) {
 }
 
 
-#endif // !EVENTS_H
+void wait_request_get_file_and_line(Ctx *ctx) {
+    int error = IPC_write_cmd(&ctx->ipc_ctx, cstr("py woy_get_file_and_line()\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_READ_WOY_FILE_LINE, &ctx->wui_state, 0);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ctx->ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+}
+
+
+void wait_request_get_locals(Ctx *ctx) {
+    int error = IPC_write_cmd(&ctx->ipc_ctx, cstr("py woy_locals()\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &ctx->wui_state, 0);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ctx->ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    /*
+       Problem: How to update the existing locals?...
+       Maybe we could detect whether we're on the same frame... If new frame detected then do not update?
+       Or maybe we don't care about that but rather we build a new tree and then try to merge that to
+       the new one. (We just need to keep what is expanded and what is not...)
+   */
+}
+
+
+/// @returns Error.
+int SymbolTree_find_node_by_full_path(SymbolTree *tree, strview_t target_symbol, SymbolTree_Iterator *out_it_readonly) {
+
+   // @todo: Grab an auxiliar string from somewhere else.
+   static strbuf_t *str_aux = NULL;
+   if (str_aux == NULL) {
+      str_aux = strbuf_create_empty(0, NULL);
+   }
+   // @todo!
+
+   strbuf_t **str_symbol_path = &str_aux;
+   strbuf_empty(str_symbol_path);
+
+   int prev_depth = -1;
+   SymbolTree_Iterator it = { 0 };
+
+   while(SymbolTree_get_next(tree, &it)) {
+      WuiSymbol *symbol = it.item;
+
+      // Return or "navigate" up.
+      if (prev_depth == -1) { prev_depth = it.depth; }
+      for (int i = 0; i < prev_depth - it.depth; ++i) {
+         strview_t removed_last_symbol = strbuf_view(str_symbol_path);
+         (void)strview_split_last_delim(&removed_last_symbol, ".", false);
+         strbuf_assign(str_symbol_path, removed_last_symbol);
+      }
+
+      // Add itself
+      if (it.depth > 0) { strbuf_append(str_symbol_path, "."); }
+      strbuf_append(str_symbol_path, strbuf_view2(&symbol->symbol_name));
+
+      printfd("Comparing (%"PRIstr") == (%"PRIstr")",
+            PRIstrarg(strbuf_view(str_symbol_path)), PRIstrarg(target_symbol));
+
+      // Check for equality
+      if (strview_compare(strbuf_view(str_symbol_path), target_symbol) == 0) {
+         *out_it_readonly = it;
+         return 0;
+      }
+
+      // Remove itself
+      if (!SymbolTree_node_has_children(tree, it)) {
+         strview_t removed_last_symbol = strbuf_view(str_symbol_path);
+         (void)strview_split_last_delim(&removed_last_symbol, ".", false);
+         strbuf_assign(str_symbol_path, removed_last_symbol);
+      }
+
+      prev_depth = it.depth;
+   }
+
+   return -1;
+}
+
+
+bool SymbolTree_node_has_children(SymbolTree *tree, SymbolTree_Iterator it) {
+    SymbolTree_Iterator it2 = it;
+    if (!SymbolTree_get_next(tree, &it2)) {
+        return false;
+    }
+    return it2.depth > it.depth;
+}
+
+
+void wait_request_update_locals(Ctx *ctx, SymbolTree *tree) {
+
+    strbuf_t **str_symbol_path = &ctx->aux_str1;
+    strbuf_t **str_list        = &ctx->aux_str2;
+    strbuf_t **str_query       = &ctx->aux_str3;
+
+    strbuf_empty(str_symbol_path);
+    strbuf_empty(str_list);
+    strbuf_empty(str_query);
+
+    // Build expanded symbols list.
+    // @note. This could be cached but for now will look them up directly.
+
+    int prev_depth = -1;
+
+    SymbolTree_Iterator it = { 0 };
+
+    while(SymbolTree_get_next(tree, &it)) {
+        WuiSymbol *symbol = it.item;
+
+        // Path "navigate" up.
+        if (prev_depth == -1) { prev_depth = it.depth; }
+        for (int i = 0; i < prev_depth - it.depth; ++i) {
+            strview_t removed_last_symbol = strbuf_view(str_symbol_path);
+            (void)strview_split_last_delim(&removed_last_symbol, ".", false);
+            strbuf_assign(str_symbol_path, removed_last_symbol);
+        }
+
+        if (symbol->is_expanded && SymbolTree_node_has_children(tree, it)) {
+            // Concatenate name.
+            if (it.depth > 0) {
+
+                // @note. Some symbols might contain '.' maybe use a different
+                // separator and replace it later when making the query.
+
+                strbuf_append(str_symbol_path, ".");
+            }
+            strbuf_append(str_symbol_path, strbuf_view2(&symbol->symbol_name));
+
+            // Add to list.
+            strbuf_append(str_list, "\"");
+            strbuf_append(str_list, strbuf_view(str_symbol_path));
+            strbuf_append(str_list, "\",");
+
+            printfd("-> (%"PRIstr")", PRIstrarg(strbuf_view(str_symbol_path)));
+        }
+
+        prev_depth = it.depth;
+    }
+
+    // Build query string.
+
+    strbuf_cat(
+        str_query,
+        cstr_SL("py woy_query_symbol_multiple(["),
+        strbuf_view(str_list),
+        cstr_SL("], True)\n")
+    );
+
+    // Send it.
+
+    printfd("1 (%"PRIstr")", PRIstrarg(strbuf_view(str_symbol_path)));
+    printfd("2 (%"PRIstr")", PRIstrarg(strbuf_view(str_list)));
+    printfd("3 (%"PRIstr")", PRIstrarg(strbuf_view(str_query)));
+
+    int error = IPC_write_cmd(&ctx->ipc_ctx, strbuf_view(str_query));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &ctx->wui_state, 0);
+    // After calling a 'WOY API' command, clear the GDB previous command
+    error = IPC_write_cmd(&ctx->ipc_ctx, cstr("echo\n"));
+    ASSERT(error == 0);
+    IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+}
+
+/*
+   The only thing it does is try to keep the same nodes expanded.
+ */
+void SymbolTree_update(SymbolTree *base, SymbolTree *update) {
+    //SymbolTree_Iterator it_base = { 0 };
+    //while (SymbolTree_get_next(base, &it_base)) {
+        //if (!it_base.item->is_expanded) { continue; }
+
+        //SymbolTree_Iterator it_update = { 0 };
+
+        //// Find matching node.
+        //while (SymbolTree_get_next(update, it_update)) {
+        //}
+
+    //}
+
+}
+
+
+void trigger_fileline_refresh(Ctx *ctx) {
+    const int FILELINE_REFRESH_TICKS = 3;
+    ctx->refresh_fileline_ticks_left = FILELINE_REFRESH_TICKS;
+}
+
+
+void process_update_fileline(Ctx *ctx) {
+    if (ctx->refresh_fileline_ticks_left < 0) { return; }
+    --ctx->refresh_fileline_ticks_left;
+    if (ctx->refresh_fileline_ticks_left > 0) { return; }
+
+    printfd("We're gonna be doing this again ok?");
+
+    //wait_request_get_locals(ctx);
+    wait_request_get_file_and_line(ctx);
+    update_file_view_from_file_line_query(ctx);
+}
+
+
+#endif // !EVENTS_H_IMPLEMENTATION
