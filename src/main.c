@@ -79,12 +79,14 @@ int main (void) {
 
     // Insert custom script.
 
-    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    error = IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_NOTHING, NULL, 0);
+    ASSERT(error == 0);
     error = IPC_write_cmd(ipc_ctx, cstr("python\n"));
     error = IPC_write_cmd(ipc_ctx, python_code_view);
     error = IPC_write_cmd(ipc_ctx, cstr("end\n"));
     ASSERT(error == 0);
-    IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_HIDE, NULL, 0);
+    error = IPC_wait_for_prompt(ipc_ctx, reader, cli_prompt, IPC_WAIT_DO_HIDE, NULL, 0);
+    ASSERT(error == 0);
 
     error = IPC_write_cmd(ipc_ctx, cstr("file ../smb-raylib/build/3djump\n"));
     ASSERT(error == 0);

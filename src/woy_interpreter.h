@@ -122,6 +122,80 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
 int WoyInterp_interpret_symbols(
    WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id
 ) {
+   const strview_t INPUT = strbuf_view2(&woy_interp->buffer);
+   strview_t input = INPUT;
+   strview_t view;
+
+   view = strview_split_first_delim(&input, ",", false);
+   if (!strview_equal(view, cstr_SL("^done"))) {
+      printfd("Error");
+      return 0;
+   }
+
+   // Split 'variables=['
+   strview_split_first_delim(&input, "[", false); 
+   // Strip ']\n'
+   input.size -= 2; 
+
+   printfd("We are left with this {%"PRIstr"}", PRIstrarg(input));
+
+   for (;;) {
+      view = strview_split_first_delim(&input, "}", true);
+      if (input.size <= 0) { break; }
+      view = strview_trim(view, cstr_SL(",{}"));
+
+      WuiSymbol symbol;
+      WuiSymbol_init(&symbol);
+
+      for (;;) {
+         if (view.size <= 0) { break; }
+
+         strview_t key_value_pair = strview_split_first_delim(&view, ",", true);
+         strview_t key = strview_split_first_delim(&key_value_pair, "=", false);
+         strview_t value = strview_trim(key_value_pair, "\"");
+
+         if (strview_equal(key, cstr_SL("name"))) {
+            value.size = int_min(value.size, symbol.symbol_name.capacity);
+            strbuf_t *tmp = &symbol.symbol_name;
+            strbuf_assign(&tmp, value);
+         } else if (strview_equal(key, cstr_SL("value"))) {
+            value.size = int_min(value.size, symbol.symbol_name.capacity);
+            strbuf_t *tmp = &symbol.value;
+            strbuf_assign(&tmp, value);
+         }
+
+         printfd("Symbol [%"PRIstr" = %"PRIstr"]", PRIstrarg(key), PRIstrarg(value));
+      }
+
+      if (symbol.symbol_name.size <= 0) {
+         continue;
+      }
+
+      // Insert.
+
+      uint out_node_id;
+      int err = SymbolTree_create_node(symbol_tree, symbol_id, &out_node_id, symbol);
+      if (err != 0) {
+         printfd("ERROR: Couldn't insert node.");
+         continue;
+      }
+   }
+
+   return 0;
+
+   /*
+      Reference input:
+      (gdb) interpreter-exec mi "-stack-list-variables --no-frame-filters 1"
+      ^done,variables=[{name="gs",arg="1",value="0x7fffffff07a0"},{name="world",value="<optimized out>"},{name="shader",value="{id = <optimized out>, locs = <optimized out>}"},{name="ambientColor",value="{r = <optimized out>, g = <optimized out>, b = <optimized out>, a = <optimized out>}"},{name="ambientColorNormalized",value="{x = <optimized out>, y = <optimized out>, z = <optimized out>}"},{name="light",value="{enabled = <optimized out>, type = <optimized out>, position = {x = <optimized out>, y = <optimized out>, z = <optimized out>}, target = {x = <optimized out>, y = <optimized out>, z = <optimized out>}, color = {r = <optimized out>, g = <optimized out>, b = <optimized out>, a = <optimized out>}, intensity = <optimized out>, attenuation_factor = <optimized out>, enabled_loc = <optimized out>, type_loc = <optimized out>, position_loc = <optimized out>, target_loc = <optimized out>, color_loc = <optimized out>, intensity_loc = <optimized out>, attenuation_factor_loc = <optimized out>}"},{name="error",value="<optimized out>"}]
+      (gdb) interpreter-exec mi "-stack-list-variables --no-frame-filters 2"
+      ^done,variables=[{name="gs",arg="1",type="GameState *",value="0x7fffffff07a0"},{name="world",type="World *",value="<optimized out>"},{name="shader",type="Shader"},{name="ambientColor",type="Color"},{name="ambientColorNormalized",type="Vector3"},{name="light",type="Light"},{name="error",type="int",value="<optimized out>"}]
+   */
+}
+
+
+int WoyInterp_interpret_symbols_old(
+   WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id
+) {
    strbuf_t *tmp = &woy_interp->buffer;
    strview_t src = strbuf_view(&tmp);
    strview_t line;

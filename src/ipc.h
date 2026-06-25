@@ -200,7 +200,7 @@ void IPC_cleanup(IPCCtx *ctx) {
 ///                             or ipc_do == IPC_WAIT_DO_READ_WOY_QUERY
 /// @note BLOCKS until gdb prompt is found or Timeout.
 /// @note Prints all output
-/// @returns Error.
+/// @returns Error. On timeout.
 int IPC_wait_for_prompt(
     IPCCtx *ipc_ctx,
     IPCReader* reader,

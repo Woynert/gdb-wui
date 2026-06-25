@@ -209,7 +209,8 @@ void wait_request_get_file_and_line(Ctx *ctx) {
 
 
 void wait_request_get_locals(Ctx *ctx) {
-    int error = IPC_write_cmd(&ctx->ipc_ctx, cstr("py woy_locals()\n"));
+    int error = IPC_write_cmd(&ctx->ipc_ctx,
+    cstr("interpreter-exec mi \"-stack-list-variables --no-frame-filters 1\"\n"));
     ASSERT(error == 0);
     IPC_wait_for_prompt(&ctx->ipc_ctx, &ctx->reader, &ctx->cli_prompt, IPC_WAIT_DO_READ_WOY_LOCALS, &ctx->wui_state, 0);
     // After calling a 'WOY API' command, clear the GDB previous command

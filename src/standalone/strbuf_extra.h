@@ -143,6 +143,10 @@ static void strbuf_empty(strbuf_t** buf_ptr)
 }
 
 
+bool strview_equal(strview_t str1, strview_t str2)
+{
+    return strview_compare(str1, str2) == 0;
+}
 
 /*
 void strbuf_pop_at_index_TEST(void) {
