@@ -5,6 +5,7 @@
 #include "sys/types.h"
 #include "strbuf.h"
 #include "strbuf_extra.h"
+#include "containers/stringpool.h"
 
 #define WUI_BREAKPOINT_STR_SIZE 255
 
@@ -41,30 +42,14 @@ void WuiBreakpoint_init (WuiBreakpoint *bp) {
 typedef struct WuiSymbol {
     bool is_expanded; /* For queries. */
     int basic_type;
-    union {
-        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _type_name;
-        strbuf_t type_name;
-    };
-    union {
-        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _symbol_name;
-        strbuf_t symbol_name;
-    };
-    union {
-        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _value;
-        strbuf_t value;
-    };
-    union {
-        strbuf_space_t(WUI_SYMBOL_VALUE_STR_SIZE) _address;
-        strbuf_t address;
-    };
+    int str_id_name;
+    int str_id_value;
+    int str_id_type_name;
+    int str_id_address;
 } WuiSymbol;
 
 void WuiSymbol_init (WuiSymbol *wui_symbol) {
-    wui_symbol->basic_type = 0;
-    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_type_name);
-    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_symbol_name);
-    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_value);
-    STRBUF_STATIC_INIT2(WUI_SYMBOL_VALUE_STR_SIZE, wui_symbol->_address);
+    *wui_symbol = (WuiSymbol) { 0 };
 }
 
 typedef enum EVENT {
@@ -94,11 +79,16 @@ typedef struct Event {
 #define DYNA__NAMESPACE Event_da
 #include "containers/da.h"
 
+typedef struct WuiSymbolTree {
+    SymbolTree tree;
+    Stringpool strpool;
+} WuiSymbolTree;
+
 typedef struct WuiState {
     WuiBreakpoint_Dyna breakpoints;
 
-    SymbolTree locals;
-    SymbolTree tmp_tree;
+    WuiSymbolTree locals;
+    WuiSymbolTree tmp_tree;
 
     bool has_valid_location; /* Guards current file path and line. */
     strbuf_t *curr_file_path; /* Absolute path. */
@@ -111,21 +101,29 @@ typedef struct WuiState {
 void WuiState_init (WuiState *wui_state) {
     *wui_state = (WuiState) { 0 };
     wui_state->breakpoints = WuiBreakpoint_Dyna_create();
-    wui_state->locals = SymbolTree_create();
-    wui_state->tmp_tree = SymbolTree_create();
     wui_state->curr_file_path = strbuf_create(0, NULL);
     wui_state->file_contents_tmp_buf = strbuf_create(0, NULL);
     wui_state->events = Event_da_create();
+
+    wui_state->locals.tree = SymbolTree_create();
+    Stringpool_create(&wui_state->locals.strpool);
+
+    wui_state->tmp_tree.tree = SymbolTree_create();
+    Stringpool_create(&wui_state->tmp_tree.strpool);
 }
 
 void WuiState_free (WuiState *wui_state) {
     WuiBreakpoint_Dyna_free(&wui_state->breakpoints);
-    SymbolTree_free(&wui_state->locals);
-    SymbolTree_free(&wui_state->tmp_tree);
     strbuf_destroy(&wui_state->curr_file_path);
     strbuf_destroy(&wui_state->file_contents_tmp_buf);
     Event_da_free(&wui_state->events);
     *wui_state = (WuiState) { 0 };
+
+    SymbolTree_free(&wui_state->locals.tree);
+    Stringpool_destroy(&wui_state->locals.strpool);
+
+    SymbolTree_free(&wui_state->tmp_tree.tree);
+    Stringpool_destroy(&wui_state->tmp_tree.strpool);
 }
 
 #endif // !WUI_STATE

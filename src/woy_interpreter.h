@@ -31,7 +31,7 @@ void WoyInterp_init(WoyInterp *woy_interp);
 void WoyInterp_reset(WoyInterp *woy_interp);
 void WoyInterp_push_line(WoyInterp *woy_interp, strview_t line);
 void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state);
-int WoyInterp_interpret_symbols(WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id);
+int WoyInterp_interpret_symbols(WoyInterp *woy_interp, WuiSymbolTree *wui_symbol_tree, uint symbol_id);
 int WoyInterp_interpret_file_line(WoyInterp *woy_interp, WuiState *wui_state);
 
 
@@ -83,7 +83,7 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
    uint cases = strnum_u32(line, 0, STRNUM_DEFAULT);
    printf("\ncases %d\n", cases);
 
-   WuiBreakpoint_Dyna_clear_preserve(&wui_state->breakpoints);
+   WuiBreakpoint_Dyna_clear_preserving(&wui_state->breakpoints);
 
    for (uint i = 0; i < cases; ++i) {
       WuiBreakpoint breakpoint;
@@ -120,7 +120,7 @@ void WoyInterp_interpret_breakpoints(WoyInterp *woy_interp, WuiState *wui_state)
   @returns error.
 */
 int WoyInterp_interpret_symbols(
-   WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id
+   WoyInterp *woy_interp, WuiSymbolTree *wui_symbol_tree, uint symbol_id
 ) {
    const strview_t INPUT = strbuf_view2(&woy_interp->buffer);
    strview_t input = INPUT;
@@ -155,26 +155,24 @@ int WoyInterp_interpret_symbols(
          strview_t value = strview_trim(key_value_pair, "\"");
 
          if (strview_equal(key, cstr_SL("name"))) {
-            value.size = int_min(value.size, symbol.symbol_name.capacity);
-            strbuf_t *tmp = &symbol.symbol_name;
-            strbuf_assign(&tmp, value);
+            int view_id = Stringpool_append(&wui_symbol_tree->strpool, value);
+            symbol.str_id_name = view_id;
          } else if (strview_equal(key, cstr_SL("value"))) {
-            value.size = int_min(value.size, symbol.symbol_name.capacity);
-            strbuf_t *tmp = &symbol.value;
-            strbuf_assign(&tmp, value);
+            int view_id = Stringpool_append(&wui_symbol_tree->strpool, value);
+            symbol.str_id_value = view_id;
          }
 
          printfd("Symbol [%"PRIstr" = %"PRIstr"]", PRIstrarg(key), PRIstrarg(value));
       }
 
-      if (symbol.symbol_name.size <= 0) {
-         continue;
-      }
+      if (symbol.str_id_name <= 0 ||
+          symbol.str_id_value <= 0
+      ) { continue; }
 
       // Insert.
 
       uint out_node_id;
-      int err = SymbolTree_create_node(symbol_tree, symbol_id, &out_node_id, symbol);
+      int err = SymbolTree_create_node(&wui_symbol_tree->tree, symbol_id, &out_node_id, symbol);
       if (err != 0) {
          printfd("ERROR: Couldn't insert node.");
          continue;
@@ -193,7 +191,8 @@ int WoyInterp_interpret_symbols(
 }
 
 
-int WoyInterp_interpret_symbols_old(
+#if 0
+int WoyInterp_interpret_symbols_old_DOESNT_WORK(
    WoyInterp *woy_interp, SymbolTree *symbol_tree, uint symbol_id
 ) {
    strbuf_t *tmp = &woy_interp->buffer;
@@ -303,32 +302,11 @@ int WoyInterp_interpret_symbols_old(
          have_parent = true;
          parent_symbol_id = out_node_id;
       }
-
-
-      //printf("Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
-            //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
-            //symbol.value.cstr, symbol.address.cstr);
    }
-
-   //printf("PRINTING SYMBOLS BELOW VVV\n");
-   // print tree contents
-   //if ((0)) {
-      //for (int i = 0; i < symbol_tree->nodes.size; ++i) {
-         //WuiSymbol symbol = symbol_tree->nodes.items[i].item;
-         //for (int k = 0; k < 4 * symbol_tree->nodes.items[i].depth; ++k) { printf(" "); }
-
-         //printf(
-            //"(TREE_ID %d parent %d) Symbol: type %d, type_name %s, symbol_name %s, value %s, address %s\n",
-            //symbol_tree->nodes.items[i].id,
-            //symbol_tree->nodes.items[i].parent_id,
-            //symbol.basic_type, symbol.type_name.cstr, symbol.symbol_name.cstr,
-            //symbol.value.cstr, symbol.address.cstr
-         //);
-      //}
-   //}
 
    return 0;
 }
+#endif
 
 /* @returns Error. */
 int WoyInterp_interpret_file_line(WoyInterp *woy_interp, WuiState *wui_state) {

@@ -18,6 +18,7 @@
 #include "wui_state.h"
 #include "ipc.h"
 #include "main_context.h"
+#include "containers/stringpool.h"
 
 /* IMPLEMENTATIONS */
 #define IPC_H_IMPLEMENTATION
@@ -221,7 +222,7 @@ int main (void) {
 
         // @Note: For now I'll handle the key events here.
         if (IsKeyPressed(KEY_G)) {
-            wait_request_update_locals(&ctx, &wui_state->locals);
+            wait_request_update_locals(&ctx, &wui_state->locals.tree);
         }
         if (IsKeyPressed(KEY_H)) {
             wait_request_get_locals(&ctx);

@@ -235,7 +235,7 @@ bool GUI__symbol_is_expandable(int symbol_type) {
     /* Symbol is ARRAY o pointer to STRUCT. */
 }
 
-void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget *widget) {
+void GUI_draw_symbol_tree(Ctx *ctx, WuiSymbolTree *symbol_tree, Widget *widget) {
     Rect2 view_rect = widget->area;
 
     BeginTextureMode(GUI.aux_texture);
@@ -250,7 +250,7 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget *widget) {
 
     int counter = 0;
     SymbolTree_Iterator it = { 0 };
-    while(SymbolTree_get_next(tree, &it)) {
+    while(SymbolTree_get_next(&symbol_tree->tree, &it)) {
         ++counter;
 
         WuiSymbol *symbol = it.item;
@@ -259,16 +259,18 @@ void GUI_draw_symbol_tree(Ctx *ctx, SymbolTree *tree, Widget *widget) {
         /* Depth. */
         for (int i = 0; i < it.depth; ++i) { strbuf_append(&gui_str, cstr_SL("   ")); }
 
-        strbuf_append_printf(&gui_str, "%s%s = %s",
+        strbuf_append_printf(&gui_str, "%s%"PRIstr" = %"PRIstr"",
             GUI__symbol_is_expandable(symbol->basic_type) ? "> " : "  ",
-            symbol->symbol_name.cstr,
-            symbol->value.cstr
+            PRIstrarg(Stringpool_get(&symbol_tree->strpool, symbol->str_id_name)),
+            PRIstrarg(Stringpool_get(&symbol_tree->strpool, symbol->str_id_value))
         );
         int prev_size = gui_str->size;
-        strbuf_append_printf(&gui_str, "%s%s",
-            symbol->type_name.cstr,
+
+        strbuf_append_printf(&gui_str, "%"PRIstr"%s",
+            PRIstrarg(Stringpool_get(&symbol_tree->strpool, symbol->str_id_type_name)),
             symbol->basic_type == SYMBOL_TYPE_PTR ? " [pointer]" : ""
         );
+
         strview_t line1 = {
             .data = gui_str->cstr,
             .size = prev_size,

@@ -103,7 +103,7 @@ static void pfx(free)(TreeSi *tree) {
 
 
 static void pfx(clear)(TreeSi *tree) {
-    pfx(Node_Dyna_clear_preserve)(&tree->nodes);
+    pfx(Node_Dyna_clear_preserving)(&tree->nodes);
     pfx(_reset)(tree);
 }
 

@@ -42,7 +42,7 @@ void get_symbol_absolute_name(WuiState *w, uint node_id, strbuf_t **buf);
 void get_symbol_absolute_name(WuiState *w, uint node_id, strbuf_t **buf) {
 
     uint parent_node_id = 0;
-    int res = SymbolTree_get_parent(&w->locals, node_id, &parent_node_id);
+    int res = SymbolTree_get_parent(&w->locals.tree, node_id, &parent_node_id);
     bool has_parent = res == 0;
     printfd("Found parent %d", has_parent);
 
@@ -54,29 +54,54 @@ void get_symbol_absolute_name(WuiState *w, uint node_id, strbuf_t **buf) {
         strbuf_append_printf(buf, ".");
     }
 
-    WuiSymbol *symbol = SymbolTree_get(&w->locals, node_id);
+    WuiSymbol *symbol = SymbolTree_get(&w->locals.tree, node_id);
     if (symbol == NULL) {
         printfd("ERR: No symbol (node id %d)", node_id);
         return;
     }
 
-    strbuf_append(buf, strbuf_view2(&symbol->symbol_name));
+    //strbuf_append(buf, strbuf_view2(&symbol->symbol_name)); //FIXME
     return;
 }
 
 void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event) {
-    int err;
-    uint node_id = event.symbol_node_id;
 
-    // Get symbol name.
-    WuiSymbol *symbol = SymbolTree_get(&ctx->wui_state.locals, node_id);
+    uint node_id = event.symbol_node_id;
+    WuiSymbol *symbol = SymbolTree_get(&ctx->wui_state.locals.tree, node_id);
     if (symbol == NULL) {
         printfd("Err: Symbol (node id %d) not found.", node_id);
         return;
     }
 
     if (symbol->is_expanded) {
-        SymbolTree_destroy_children(&ctx->wui_state.locals, node_id);
+        SymbolTree_destroy_children(&ctx->wui_state.locals.tree, node_id);
+        return;
+    }
+
+    /* Just toggle the expanded property. Next frame well query it all. */
+    /* @note: We expand anything, however, on update, symbols with no children
+       will be un-expanded. */
+
+    symbol->is_expanded = !symbol->is_expanded;
+
+    return;
+}
+
+
+// @todo: Delete me.
+void WuiState_handle_event_symbol_query_old(Ctx *ctx, EventSymbolQuery event) {
+    int err;
+    uint node_id = event.symbol_node_id;
+
+    // Get symbol name.
+    WuiSymbol *symbol = SymbolTree_get(&ctx->wui_state.locals.tree, node_id);
+    if (symbol == NULL) {
+        printfd("Err: Symbol (node id %d) not found.", node_id);
+        return;
+    }
+
+    if (symbol->is_expanded) {
+        SymbolTree_destroy_children(&ctx->wui_state.locals.tree, node_id);
         symbol->is_expanded = false;
         return;
     }
@@ -112,6 +137,7 @@ void WuiState_handle_event_symbol_query(Ctx *ctx, EventSymbolQuery event) {
     strbuf_destroy(&aux_str_name);
 }
 
+
 void WuiState_process_events(Ctx *ctx) {
     WuiState *w = &ctx->wui_state;
     for (int i = 0; i < w->events.size; ++i) {
@@ -132,7 +158,7 @@ void WuiState_process_events(Ctx *ctx) {
         }
     }
 
-    Event_da_clear_preserve(&w->events);
+    Event_da_clear_preserving(&w->events);
 }
 
 
@@ -226,6 +252,7 @@ void wait_request_get_locals(Ctx *ctx) {
 }
 
 
+#if 0
 /// @returns Error.
 int SymbolTree_find_node_by_full_path(SymbolTree *tree, strview_t target_symbol, SymbolTree_Iterator *out_it_readonly) {
 
@@ -278,6 +305,7 @@ int SymbolTree_find_node_by_full_path(SymbolTree *tree, strview_t target_symbol,
 
    return -1;
 }
+#endif
 
 
 bool SymbolTree_node_has_children(SymbolTree *tree, SymbolTree_Iterator it) {
@@ -317,7 +345,8 @@ void wait_request_update_locals(Ctx *ctx, SymbolTree *tree) {
             strbuf_assign(str_symbol_path, removed_last_symbol);
         }
 
-        if (symbol->is_expanded && SymbolTree_node_has_children(tree, it)) {
+        //if (symbol->is_expanded && SymbolTree_node_has_children(tree, it)) {
+        if (symbol->is_expanded) {
             // Concatenate name.
             if (it.depth > 0) {
 
@@ -326,7 +355,7 @@ void wait_request_update_locals(Ctx *ctx, SymbolTree *tree) {
 
                 strbuf_append(str_symbol_path, ".");
             }
-            strbuf_append(str_symbol_path, strbuf_view2(&symbol->symbol_name));
+            //strbuf_append(str_symbol_path, strbuf_view2(&symbol->symbol_name)); // COMMENTED
 
             // Add to list.
             strbuf_append(str_list, "\"");
@@ -378,7 +407,6 @@ void SymbolTree_update(SymbolTree *base, SymbolTree *update) {
         //}
 
     //}
-
 }
 
 

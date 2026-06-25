@@ -250,7 +250,7 @@ void textedit__update_linebreaks(Textedit *textedit, int startindex) {
     strview_t buffer = strbuf_view2(textedit->buffer);
     if (startindex >= buffer.size) { startindex = 0; };
 
-    int_Dyna_clear_preserve(&textedit->linebreaks);
+    int_Dyna_clear_preserving(&textedit->linebreaks);
     int_Dyna_append(&textedit->linebreaks, -1);
 
     for (int i = startindex; i < textedit->buffer->size; ++i) {
@@ -326,7 +326,7 @@ void textedit_reveal_line(Textedit *t, int line) {
 /// @return Error.
 int textedit_get_visible_lines(Textedit *t, Textedit_VisibleLines *out_visible_lines) {
 
-    int_Dyna_clear_preserve(&t->return_visible_lines_cache);
+    int_Dyna_clear_preserving(&t->return_visible_lines_cache);
 
     int viline_i = t->visualline_start;
     TexteditVisualLine *viline;
@@ -617,7 +617,7 @@ void textedit__build_visual_lines(
     int wrap_counter = 0;
     int codepoint_count = 0;
 
-    TexteditVisualLine_Dyna_clear_preserve(&textedit->visualblocks);
+    TexteditVisualLine_Dyna_clear_preserving(&textedit->visualblocks);
     printfd("from_real_line %d source.size %d max_line_amount %d", from_real_line, source.size, max_line_amount);
 
     for (;b <= source.size && line_counter < max_line_amount;) {

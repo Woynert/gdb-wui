@@ -140,7 +140,7 @@ int FileExplorer_list_path(FileExplorer *file_explorer, strview_t path_view) {
         return -1;
     }
 
-    File_Dyna_clear_preserve(&file_explorer->files_dyna);
+    File_Dyna_clear_preserving(&file_explorer->files_dyna);
 
     {
         strbuf_t *file_explorer_curr_path = &file_explorer->curr_path;
@@ -382,7 +382,7 @@ int FileViewer_load_file(FileViewer *viewer, strview_t path_view) {
 
         strview_t line_reader = strbuf_view(&viewer->file_data);
         strview_t line = { 0 };
-        strview_t_Dyna_clear_preserve(&viewer->lines);
+        strview_t_Dyna_clear_preserving(&viewer->lines);
         viewer->scroll_line = 0;
         viewer->scroll = 0;
 

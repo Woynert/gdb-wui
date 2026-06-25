@@ -50,8 +50,8 @@ typedef struct {
 static Dyna  pfx(create)                      (void);
 static void  pfx(free)                        (Dyna *da);
 static int   pfx(resize)                      (Dyna *da, int new_capacity);
-static void  pfx(clear)                       (Dyna *da);
-static void  pfx(clear_preserve)              (Dyna *da);
+static void  pfx(clear_freeing)               (Dyna *da);
+static void  pfx(clear_preserving)            (Dyna *da);
 static int   pfx(append)                      (Dyna *da, TYPE item);
 static int   pfx(grow)                        (Dyna *da, int min_capacity);
 static void  pfx(fill)                        (Dyna *da);
@@ -201,13 +201,13 @@ static int pfx(remove_at) (Dyna *da, int index) {
 
 
 /// Clears the array freeing old memory.
-static void pfx(clear) (Dyna *da) {
+static void pfx(clear_freeing) (Dyna *da) {
     pfx(free)(da);
 }
 
 
 /// Clears the array but preserves the allocated memory.
-static void pfx(clear_preserve) (Dyna *da) {
+static void pfx(clear_preserving) (Dyna *da) {
     da->size = 0;
 }
 
