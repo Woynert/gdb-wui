@@ -134,6 +134,13 @@ tree_exe = executable(
   ,c_args : my_extra_args
 )
 
+test_map_exe = executable(
+  'test_map'
+  ,'src/containers/map_test.c'
+  ,include_directories : core_includes
+  ,c_args : my_extra_args
+)
+
 #ring_exe = executable(
   #'ring'
   #,'src/containers/fiforing_test.c'

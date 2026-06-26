@@ -31,6 +31,10 @@
 #ifndef DYNA__NAMESPACE
 #define DYNA__NAMESPACE DYNA__TOKCAT(DYNA__TYPE, _Dyna)
 #endif
+
+#if (defined(pfx) | defined(TYPE) | defined(Dyna))
+#error "These macros should not be defined: pfx, TYPE, Dyna"
+#endif
 #define pfx(name) DYNA__TOKCAT(DYNA__TOKCAT(DYNA__NAMESPACE, _), name)
 #define TYPE DYNA__TYPE
 #define Dyna DYNA__NAMESPACE
@@ -54,14 +58,15 @@ static void  pfx(clear_freeing)               (Dyna *da);
 static void  pfx(clear_preserving)            (Dyna *da);
 static int   pfx(append)                      (Dyna *da, TYPE item);
 static int   pfx(grow)                        (Dyna *da, int min_capacity);
-static void  pfx(fill)                        (Dyna *da);
+static void  pfx(fill_zero)                   (Dyna *da);
+static void  pfx(fill_trash)                  (Dyna *da);
 static void  pfx(fill_with_value)             (Dyna *da, TYPE item);
 static int   pfx(shrink)                      (Dyna *da);
 static int   pfx(insert_at_preserve_order)    (Dyna *da, int index, TYPE item);
 static int   pfx(remove_at)                   (Dyna *da, int index);
 static int   pfx(pop_at_preserve_order)       (Dyna *da, int index);
 static int   pfx(set)                         (Dyna *da, int index, TYPE item);
-static TYPE *pfx(get_safe)                     (const Dyna *da, int index);
+static TYPE *pfx(get_safe)                    (const Dyna *da, int index);
 static bool  pfx(get_next)                    (const Dyna *da, pfx(Iterator) *it);
 #ifdef DYNA__ENABLE_COMPARISONS
 static bool  pfx(has)                         (const Dyna *da, TYPE value);
@@ -157,8 +162,11 @@ static int pfx(shrink) (Dyna *da) {
     return pfx(resize)(da, da->size);
 }
 
-/* @note Fills with zeroes. */
-static void pfx(fill) (Dyna *da) {
+static void pfx(fill_trash) (Dyna *da) {
+    da->size = da->capacity;
+}
+
+static void pfx(fill_zero) (Dyna *da) {
     da->size = da->capacity;
     memset(da->items, 0, sizeof(TYPE) * (size_t)da->capacity);
 }
